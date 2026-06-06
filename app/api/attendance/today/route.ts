@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withCompany, getCompanyId, getUserId } from '@/lib/db/withCompany'
+import { requireAuth } from '@/lib/auth/requireAuth'
+import { withCompany } from '@/lib/db/withCompany'
 import type { ApiError } from '@/lib/types'
 
 function getTodayJST(): string {
@@ -9,13 +10,12 @@ function getTodayJST(): string {
 
 export async function GET(request: NextRequest) {
   try {
-    const companyId = getCompanyId(request)
-    const userId = getUserId(request)
-    const db = withCompany(companyId)
+    const payload = await requireAuth(request)
+    const db = withCompany(payload.company_id)
 
     const { data: record } = await db
       .select('attendance_records')
-      .eq('user_id', userId)
+      .eq('user_id', payload.user_id)
       .eq('work_date', getTodayJST())
       .single()
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withCompany, getCompanyId, getUserId } from '@/lib/db/withCompany'
+import { requireAuth } from '@/lib/auth/requireAuth'
+import { withCompany } from '@/lib/db/withCompany'
 import { writeAuditLog } from '@/lib/audit/log'
 import type { ApiError } from '@/lib/types'
 
@@ -10,8 +11,8 @@ function getTodayJST(): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const companyId = getCompanyId(request)
-    const userId = getUserId(request)
+    const payload = await requireAuth(request)
+    const { company_id: companyId, user_id: userId } = payload
     const db = withCompany(companyId)
 
     const workDate = getTodayJST()
@@ -55,6 +56,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ record: inserted })
   } catch (error) {
     console.error('clock-in unexpected error:', error)
-    return NextResponse.json<ApiError>({ error: 'サーバーエラーが発生しました' }, { status: 500 })
+    return NextResponse.json<ApiError>({ error: 'Unauthorized' }, { status: 401 })
   }
 }

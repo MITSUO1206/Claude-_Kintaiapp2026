@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withCompany, getCompanyId, getUserId } from '@/lib/db/withCompany'
+import { requireAuth } from '@/lib/auth/requireAuth'
+import { withCompany } from '@/lib/db/withCompany'
 import type { ApiError } from '@/lib/types'
 
 export async function GET(request: NextRequest) {
   try {
-    const companyId = getCompanyId(request)
-    const userId = getUserId(request)
-    const db = withCompany(companyId)
+    const payload = await requireAuth(request)
+    const db = withCompany(payload.company_id)
 
     const { data: user, error } = await db
       .select('users', 'id, employee_code, name, role, force_password_change')
-      .eq('id', userId)
+      .eq('id', payload.user_id)
       .single()
 
     if (error || !user) {

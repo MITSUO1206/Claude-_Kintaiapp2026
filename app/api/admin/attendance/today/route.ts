@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withCompany, getCompanyId, getUserRole } from '@/lib/db/withCompany'
+import { requireAuth } from '@/lib/auth/requireAuth'
+import { withCompany } from '@/lib/db/withCompany'
 import type { ApiError } from '@/lib/types'
 
 function getTodayJST(): string {
@@ -12,14 +13,13 @@ type RecordRow = { user_id: string; clock_in: string | null; clock_out: string |
 
 export async function GET(request: NextRequest) {
   try {
-    const companyId = getCompanyId(request)
-    const role = getUserRole(request)
+    const payload = await requireAuth(request)
 
-    if (role !== 'admin' && role !== 'manager') {
+    if (payload.role !== 'admin' && payload.role !== 'manager') {
       return NextResponse.json<ApiError>({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const db = withCompany(companyId)
+    const db = withCompany(payload.company_id)
     const today = getTodayJST()
 
     const { data: users, error: usersError } = await db

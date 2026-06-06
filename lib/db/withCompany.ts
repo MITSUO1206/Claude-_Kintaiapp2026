@@ -35,24 +35,3 @@ export function withCompany(companyId: string) {
   }
 }
 
-export function getCompanyId(request: Request): string {
-  const companyId = (request as Request & { headers: Headers }).headers.get('x-company-id')
-  if (!companyId) throw new Error('company_id not found in request headers')
-  return companyId
-}
-
-export function getUserId(request: Request): string {
-  const userId = (request as Request & { headers: Headers }).headers.get('x-user-id')
-  if (!userId) throw new Error('user_id not found in request headers')
-  return userId
-}
-
-export function getUserRole(request: Request): string {
-  const role = (request as Request & { headers: Headers }).headers.get('x-user-role')
-  if (!role) throw new Error('user_role not found in request headers')
-  return role
-}
-
-export function getUserName(request: Request): string {
-  return (request as Request & { headers: Headers }).headers.get('x-user-name') ?? ''
-}

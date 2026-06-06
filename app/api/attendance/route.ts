@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withCompany, getCompanyId, getUserId } from '@/lib/db/withCompany'
+import { requireAuth } from '@/lib/auth/requireAuth'
+import { withCompany } from '@/lib/db/withCompany'
 import type { AttendanceRecord, ApiError } from '@/lib/types'
 
 export async function GET(request: NextRequest) {
   try {
-    const companyId = getCompanyId(request)
-    const userId = getUserId(request)
-    const db = withCompany(companyId)
+    const payload = await requireAuth(request)
+    const db = withCompany(payload.company_id)
 
     const url = new URL(request.url)
     const year = url.searchParams.get('year')
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     const { data: records, error } = await db
       .select('attendance_records')
-      .eq('user_id', userId)
+      .eq('user_id', payload.user_id)
       .gte('work_date', from)
       .lte('work_date', to)
       .order('work_date', { ascending: true })
