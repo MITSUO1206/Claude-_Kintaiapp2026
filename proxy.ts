@@ -31,13 +31,21 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    const response = NextResponse.next()
-    response.headers.set('x-user-id', payload.user_id)
-    response.headers.set('x-company-id', payload.company_id)
-    response.headers.set('x-user-role', payload.role)
-    response.headers.set('x-employee-code', payload.employee_code)
-    response.headers.set('x-user-name', payload.name)
-    return response
+    // Clone request headers and strip any client-supplied identity headers first
+    // to prevent spoofing — clients must never be able to set these themselves
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.delete('x-user-id')
+    requestHeaders.delete('x-company-id')
+    requestHeaders.delete('x-user-role')
+    requestHeaders.delete('x-employee-code')
+    requestHeaders.delete('x-user-name')
+    // Then set verified values from the JWT
+    requestHeaders.set('x-user-id', payload.user_id)
+    requestHeaders.set('x-company-id', payload.company_id)
+    requestHeaders.set('x-user-role', payload.role)
+    requestHeaders.set('x-employee-code', payload.employee_code)
+    requestHeaders.set('x-user-name', payload.name)
+    return NextResponse.next({ request: { headers: requestHeaders } })
   } catch {
     const response = NextResponse.redirect(new URL('/login', request.url))
     response.cookies.delete('auth_token')
