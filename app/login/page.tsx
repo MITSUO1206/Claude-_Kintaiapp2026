@@ -36,7 +36,9 @@ export default function LoginPage() {
         return
       }
 
-      if (data.user.role === 'admin' || data.user.role === 'manager') {
+      if (data.user.force_password_change) {
+        router.push('/change-password')
+      } else if (data.user.role === 'admin' || data.user.role === 'manager') {
         router.push('/admin')
       } else {
         router.push('/dashboard')
@@ -95,6 +97,10 @@ export default function LoginPage() {
           <p className="text-xs text-gray-400 text-center mt-4">
             ※ 管理者から配布された会社IDと社員番号でログイン
           </p>
+          <div className="text-xs text-gray-400 text-center mt-2 flex justify-center gap-3">
+            <a href="/terms" className="hover:underline">利用規約</a>
+            <a href="/privacy" className="hover:underline">プライバシーポリシー</a>
+          </div>
         </CardContent>
       </Card>
     </div>

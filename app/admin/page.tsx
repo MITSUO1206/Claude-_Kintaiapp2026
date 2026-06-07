@@ -56,6 +56,12 @@ export default async function AdminPage() {
       <header className="bg-white border-b px-4 py-3 flex items-center justify-between">
         <span className="font-bold text-blue-600 text-lg">KintaiApp 管理画面</span>
         <div className="flex items-center gap-3">
+          <a href="/admin/attendance" className="text-xs text-blue-500 hover:underline">勤怠管理</a>
+          <a href="/admin/requests" className="text-xs text-blue-500 hover:underline">申請承認</a>
+          <a href="/admin/monthly-closing" className="text-xs text-blue-500 hover:underline">月次締め</a>
+          <a href="/admin/payslips" className="text-xs text-blue-500 hover:underline">給与明細</a>
+          <a href="/admin/users" className="text-xs text-blue-500 hover:underline">社員管理</a>
+          <a href="/admin/settings" className="text-xs text-blue-500 hover:underline">会社設定</a>
           <span className="text-sm text-gray-600">{payload.name}</span>
           <form action="/api/auth/logout" method="POST">
             <button type="submit" className="text-xs text-gray-400 hover:text-gray-600">

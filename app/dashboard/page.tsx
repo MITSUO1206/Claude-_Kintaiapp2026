@@ -34,6 +34,17 @@ export default async function DashboardPage() {
     .eq('work_date', today)
     .single()
 
+  // アクティブな休憩ログを取得
+  let activeBreakStart: string | null = null
+  if (todayRecord) {
+    const { data: activeBreak } = await db
+      .select('break_logs', 'break_start')
+      .eq('attendance_id', (todayRecord as unknown as { id: string }).id)
+      .is('break_end', null)
+      .single()
+    activeBreakStart = (activeBreak as unknown as { break_start: string } | null)?.break_start ?? null
+  }
+
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
   const monthFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
@@ -60,6 +71,8 @@ export default async function DashboardPage() {
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-600">{payload.name}</span>
           <a href="/attendance" className="text-xs text-blue-500 hover:underline">勤怠履歴</a>
+          <a href="/requests" className="text-xs text-blue-500 hover:underline">申請</a>
+          <a href="/payslips" className="text-xs text-blue-500 hover:underline">給与明細</a>
           <form action="/api/auth/logout" method="POST">
             <button type="submit" className="text-xs text-gray-400 hover:text-gray-600">
               ログアウト
@@ -76,7 +89,10 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ClockButtons initialRecord={todayRecord as AttendanceRecord | null} />
+            <ClockButtons
+              initialRecord={todayRecord as AttendanceRecord | null}
+              initialBreakStart={activeBreakStart}
+            />
           </CardContent>
         </Card>
 

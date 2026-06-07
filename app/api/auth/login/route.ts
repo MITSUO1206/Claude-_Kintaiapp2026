@@ -3,10 +3,23 @@ import bcrypt from 'bcryptjs'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { signJWT } from '@/lib/auth/jwt'
 import { writeAuditLog } from '@/lib/audit/log'
+import { checkRateLimit } from '@/lib/ratelimit'
 import type { Company, User, ApiError } from '@/lib/types'
+
+const LOCK_THRESHOLD = 5
+const LOCK_MINUTES = 30
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+    const { allowed, remaining } = await checkRateLimit(`login:${ip}`)
+    if (!allowed) {
+      return NextResponse.json<ApiError>(
+        { error: 'ログイン試行回数の上限に達しました。1分後に再試行してください', code: 'RATE_LIMITED' },
+        { status: 429, headers: { 'X-RateLimit-Remaining': String(remaining) } }
+      )
+    }
+
     const body = await request.json()
     const { company_code, employee_code, password } = body
 
@@ -45,15 +58,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const passwordMatch = await bcrypt.compare(password, (user as User).password_hash)
+    const typedUser = user as User & { failed_login_count: number; locked_until: string | null }
+
+    // アカウントロック確認
+    if (typedUser.locked_until && new Date(typedUser.locked_until) > new Date()) {
+      const remaining = Math.ceil(
+        (new Date(typedUser.locked_until).getTime() - Date.now()) / 60000
+      )
+      return NextResponse.json<ApiError>(
+        { error: `アカウントがロックされています。あと約${remaining}分後に再試行してください`, code: 'ACCOUNT_LOCKED' },
+        { status: 423 }
+      )
+    }
+
+    const passwordMatch = await bcrypt.compare(password, typedUser.password_hash)
     if (!passwordMatch) {
+      const newCount = (typedUser.failed_login_count ?? 0) + 1
+      const updates: Record<string, unknown> = { failed_login_count: newCount }
+      if (newCount >= LOCK_THRESHOLD) {
+        updates.locked_until = new Date(Date.now() + LOCK_MINUTES * 60000).toISOString()
+      }
+      await supabaseAdmin.from('users').update(updates).eq('id', typedUser.id)
+
       return NextResponse.json<ApiError>(
         { error: 'IDまたはパスワードが正しくありません' },
         { status: 401 }
       )
     }
 
-    const typedUser = user as User
+    // ログイン成功: 失敗カウントリセット
+    await supabaseAdmin.from('users').update({
+      failed_login_count: 0,
+      locked_until: null,
+    }).eq('id', typedUser.id)
 
     const token = await signJWT({
       user_id: typedUser.id,
@@ -67,7 +104,7 @@ export async function POST(request: NextRequest) {
       company_id: typedUser.company_id,
       user_id: typedUser.id,
       action: 'login',
-      ip_address: request.headers.get('x-forwarded-for') ?? 'unknown',
+      ip_address: ip,
     })
 
     const response = NextResponse.json({
