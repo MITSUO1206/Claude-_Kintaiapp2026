@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { MonthlyApproval } from '@/lib/types'
+import type { MonthlyApproval, ApprovalStatus } from '@/lib/types'
 
 interface ApprovalBannerProps {
   year: number
@@ -10,7 +10,7 @@ interface ApprovalBannerProps {
   onSubmitted: (approval: MonthlyApproval) => void
 }
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
+const STATUS_LABEL: Record<ApprovalStatus, { label: string; color: string }> = {
   draft:     { label: '未申請', color: 'text-gray-500' },
   submitted: { label: '申請済み（承認待ち）', color: 'text-amber-600' },
   approved:  { label: '承認済み', color: 'text-green-600' },
