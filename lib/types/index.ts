@@ -56,7 +56,7 @@ export interface AttendanceRecord {
   night_minutes: number
   holiday_minutes: number
   is_holiday_work: boolean
-  work_location: 'office' | 'home' | 'satellite' | 'other' | null
+  work_location: WorkLocation | null
   is_locked: boolean
   status: AttendanceStatus
   created_at: string
