@@ -30,6 +30,12 @@ export function withCompany(companyId: string) {
       return db.from(table).delete().eq('company_id', companyId)
     },
 
+    upsert<T extends Record<string, unknown>>(table: string, data: T, onConflict: string) {
+      const record = { ...data, company_id: companyId }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return db.from(table).upsert(record as any, { onConflict }).select()
+    },
+
     raw: db,
     companyId,
   }

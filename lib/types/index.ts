@@ -21,6 +21,8 @@ export interface WorkRule {
   overtime_limit_hours: number
   closing_day: number
   payment_day: number
+  holiday_weekdays: string[]
+  payment_on_holiday: string
 }
 
 export interface User {
@@ -54,6 +56,7 @@ export interface AttendanceRecord {
   night_minutes: number
   holiday_minutes: number
   is_holiday_work: boolean
+  work_location: 'office' | 'home' | 'satellite' | 'other' | null
   is_locked: boolean
   status: AttendanceStatus
   created_at: string
@@ -197,4 +200,21 @@ export interface ApiError {
   error: string
   code?: string
   details?: Record<string, string>
+}
+
+export type WorkLocation = 'office' | 'home' | 'satellite' | 'other'
+
+export type ApprovalStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
+
+export interface MonthlyApproval {
+  id: string
+  company_id: string
+  user_id: string
+  year: number
+  month: number
+  status: ApprovalStatus
+  submitted_at: string | null
+  approved_at: string | null
+  approved_by: string | null
+  created_at: string
 }
