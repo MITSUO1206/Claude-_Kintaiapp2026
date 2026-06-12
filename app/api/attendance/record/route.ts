@@ -9,9 +9,11 @@ function toJSTTimestamp(date: string, time: string): string {
   return `${date}T${time}:00+09:00`
 }
 
-// HH:MM 形式チェック
+// HH:MM 形式チェック（値域も検証）
 function isValidTime(t: string): boolean {
-  return /^\d{2}:\d{2}$/.test(t)
+  if (!/^\d{2}:\d{2}$/.test(t)) return false
+  const [h, m] = t.split(':').map(Number)
+  return h >= 0 && h <= 23 && m >= 0 && m <= 59
 }
 
 export async function PUT(request: NextRequest) {
@@ -40,6 +42,11 @@ export async function PUT(request: NextRequest) {
     }
     if (typeof break_minutes !== 'number' || break_minutes < 0) {
       return NextResponse.json<ApiError>({ error: '休憩時間が不正です' }, { status: 400 })
+    }
+
+    const VALID_LOCATIONS = ['office', 'home', 'satellite', 'other'] as const
+    if (work_location !== null && work_location !== undefined && !(VALID_LOCATIONS as readonly string[]).includes(work_location)) {
+      return NextResponse.json<ApiError>({ error: '就業場所の値が不正です' }, { status: 400 })
     }
 
     // actual_minutes 計算
@@ -132,7 +139,8 @@ export async function PUT(request: NextRequest) {
     })
 
     return NextResponse.json({ record })
-  } catch {
+  } catch (error) {
+    console.error('attendance record PUT error:', error)
     return NextResponse.json<ApiError>({ error: 'Unauthorized' }, { status: 401 })
   }
 }
