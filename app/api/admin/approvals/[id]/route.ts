@@ -45,7 +45,7 @@ export async function POST(
     const { data, error } = await db
       .update('monthly_approvals', {
         status:      newStatus,
-        approved_at: now,
+        approved_at: action === 'approve' ? now : null,
         approved_by: payload.user_id,
       })
       .eq('id', id)
