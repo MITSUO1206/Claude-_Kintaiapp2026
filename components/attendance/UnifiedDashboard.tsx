@@ -54,10 +54,20 @@ export function UnifiedDashboard({
   // 日付クリック → その日のレコードを取得してフォームに表示
   const handleSelectDate = useCallback(async (date: string) => {
     setSelectedDate(date)
+    const [y, m] = date.split('-')
+    const dateYear  = parseInt(y)
+    const dateMonth = parseInt(m)
+
+    // 同月内ならキャッシュ済み monthRecords から取得（API 不要）
+    if (dateYear === year && dateMonth === month) {
+      setSelectedRecord(monthRecords.find((r) => r.work_date === date) ?? null)
+      return
+    }
+
+    // 別月なら API から取得
     setLoadingDate(true)
     try {
-      const [y, m] = date.split('-')
-      const res = await fetch(`/api/attendance?year=${y}&month=${parseInt(m)}`)
+      const res = await fetch(`/api/attendance?year=${dateYear}&month=${dateMonth}`)
       if (res.ok) {
         const data = await res.json()
         const rec = (data.records as AttendanceRecord[]).find((r) => r.work_date === date) ?? null
@@ -66,7 +76,7 @@ export function UnifiedDashboard({
     } finally {
       setLoadingDate(false)
     }
-  }, [])
+  }, [year, month, monthRecords])
 
   // 月変更 → その月のレコードと承認状況を再取得
   const handleMonthChange = useCallback(async (newYear: number, newMonth: number) => {
