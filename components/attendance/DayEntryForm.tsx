@@ -56,6 +56,7 @@ export function DayEntryForm({ selectedDate, record, onSaved }: DayEntryFormProp
   }, [selectedDate, record])
 
   async function handleSave() {
+    if (isLocked) return
     setLoading(true)
     setError('')
     setSaved(false)
