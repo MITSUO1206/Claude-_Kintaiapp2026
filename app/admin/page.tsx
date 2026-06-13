@@ -4,14 +4,17 @@ import { verifyJWT } from '@/lib/auth/jwt'
 import { withCompany } from '@/lib/db/withCompany'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { RemindButton } from '@/components/RemindButton'
+import { AdminSidebar } from '@/components/AdminSidebar'
 
 function getTodayJST(): string {
   const jst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
   return jst.toISOString().split('T')[0]
 }
 
-type UserRow = { id: string; employee_code: string; name: string; role: string }
+type UserRow = { id: string; employee_code: string; name: string; role: string; email: string | null }
 type RecordRow = { user_id: string; clock_in: string | null; clock_out: string | null }
+type ClosingRow = { user_id: string; employee_confirmed_at: string | null; closed_at: string | null }
 
 export default async function AdminPage() {
   const cookieStore = await cookies()
@@ -20,61 +23,47 @@ export default async function AdminPage() {
 
   const payload = await verifyJWT(token).catch(() => null)
   if (!payload) redirect('/login')
-
-  if (payload.role !== 'admin' && payload.role !== 'manager') {
-    redirect('/dashboard')
-  }
+  if (payload.role !== 'admin' && payload.role !== 'manager') redirect('/dashboard')
 
   const db = withCompany(payload.company_id)
   const today = getTodayJST()
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
 
-  const { data: users } = await db
-    .select('users', 'id, employee_code, name, role')
-    .eq('is_active', true)
-    .order('employee_code', { ascending: true })
+  const [usersRes, todayRes, pendingRes, closingsRes] = await Promise.all([
+    db.select('users', 'id, employee_code, name, role, email').eq('is_active', true).order('employee_code', { ascending: true }),
+    db.select('attendance_records', 'user_id, clock_in, clock_out').eq('work_date', today),
+    db.select('requests', 'id').eq('status', 'pending'),
+    db.select('monthly_closings', 'user_id, employee_confirmed_at, closed_at').eq('year', year).eq('month', month),
+  ])
 
-  const { data: todayRecords } = await db
-    .select('attendance_records', 'user_id, clock_in, clock_out')
-    .eq('work_date', today)
-
-  const recordMap = new Map(
-    ((todayRecords ?? []) as unknown as RecordRow[]).map((r) => [r.user_id, r])
-  )
+  const allUsers = ((usersRes.data ?? []) as unknown as UserRow[]).filter((u) => u.role !== 'admin')
+  const recordMap = new Map(((todayRes.data ?? []) as unknown as RecordRow[]).map((r) => [r.user_id, r]))
+  const closingMap = new Map(((closingsRes.data ?? []) as unknown as ClosingRow[]).map((c) => [c.user_id, c]))
+  const pendingCount = (pendingRes.data ?? []).length
 
   const statusCounts = { clocked_in: 0, clocked_out: 0, not_clocked: 0 }
-  const userList = ((users ?? []) as unknown as UserRow[]).map((u) => {
+  const userList = allUsers.map((u) => {
     const r = recordMap.get(u.id)
     const status = r ? (r.clock_out ? 'clocked_out' : 'clocked_in') : 'not_clocked'
     statusCounts[status]++
     return { ...u, today_status: status, clock_in: r?.clock_in ?? null }
   })
 
+  const unconfirmedUsers = allUsers.filter((u) => {
+    const c = closingMap.get(u.id)
+    return !c?.employee_confirmed_at && !c?.closed_at
+  })
+
   const [y, m, d] = today.split('-')
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-4 py-3 flex items-center justify-between">
-        <span className="font-bold text-blue-600 text-lg">KintaiApp 管理画面</span>
-        <div className="flex items-center gap-3">
-          <a href="/admin/attendance" className="text-xs text-blue-500 hover:underline">勤怠管理</a>
-          <a href="/admin/requests" className="text-xs text-blue-500 hover:underline">申請承認</a>
-          <a href="/admin/monthly-closing" className="text-xs text-blue-500 hover:underline">月次締め</a>
-          <a href="/admin/payslips" className="text-xs text-blue-500 hover:underline">給与明細</a>
-          <a href="/admin/users" className="text-xs text-blue-500 hover:underline">社員管理</a>
-          <a href="/admin/settings" className="text-xs text-blue-500 hover:underline">会社設定</a>
-          <span className="text-sm text-gray-600">{payload.name}</span>
-          <form action="/api/auth/logout" method="POST">
-            <button type="submit" className="text-xs text-gray-400 hover:text-gray-600">
-              ログアウト
-            </button>
-          </form>
-        </div>
-      </header>
+    <div className="flex min-h-screen bg-gray-50">
+      <AdminSidebar userName={payload.name} pendingCount={pendingCount} />
 
-      <main className="max-w-3xl mx-auto p-4 space-y-4">
-        <h1 className="text-xl font-bold">
-          本日の出勤状況 — {y}年{m}月{d}日
-        </h1>
+      <main className="flex-1 p-6 space-y-4 max-w-3xl">
+        <h1 className="text-2xl font-bold text-gray-800">出退勤状況 — {y}年{m}月{d}日</h1>
 
         <div className="grid grid-cols-3 gap-3">
           <Card>
@@ -97,6 +86,43 @@ export default async function AdminPage() {
           </Card>
         </div>
 
+        {unconfirmedUsers.length > 0 && (
+          <Card className="border-yellow-200 bg-yellow-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-yellow-800 flex items-center justify-between">
+                <span>{year}年{month}月 月次確認未申請 — {unconfirmedUsers.length}名</span>
+                <RemindButton
+                  year={year}
+                  month={month}
+                  userIds={unconfirmedUsers.map((u) => u.id)}
+                />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex flex-wrap gap-2">
+                {unconfirmedUsers.map((u) => (
+                  <span key={u.id} className="text-xs bg-yellow-100 border border-yellow-300 text-yellow-800 px-2 py-0.5 rounded">
+                    {u.name}
+                  </span>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <a
+          href="/admin/approvals"
+          className="block bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">月末締め承認</p>
+              <p className="text-xs text-gray-400 mt-0.5">{year}年{month}月の申請一覧を確認する</p>
+            </div>
+            <span className="text-gray-400">›</span>
+          </div>
+        </a>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">全社員一覧</CardTitle>
@@ -117,24 +143,12 @@ export default async function AdminPage() {
                     <td className="px-3 py-2 text-gray-500">{u.employee_code}</td>
                     <td className="px-3 py-2 font-medium">{u.name}</td>
                     <td className="px-3 py-2 text-center">
-                      {u.today_status === 'clocked_in' && (
-                        <Badge className="bg-green-500 text-white text-xs">出勤中</Badge>
-                      )}
-                      {u.today_status === 'clocked_out' && (
-                        <Badge variant="secondary" className="text-xs">退勤済</Badge>
-                      )}
-                      {u.today_status === 'not_clocked' && (
-                        <Badge variant="destructive" className="text-xs">未打刻</Badge>
-                      )}
+                      {u.today_status === 'clocked_in' && <Badge className="bg-green-500 text-white text-xs">出勤中</Badge>}
+                      {u.today_status === 'clocked_out' && <Badge variant="secondary" className="text-xs">退勤済</Badge>}
+                      {u.today_status === 'not_clocked' && <Badge variant="destructive" className="text-xs">未打刻</Badge>}
                     </td>
                     <td className="px-3 py-2 text-center text-gray-500">
-                      {u.clock_in
-                        ? new Date(u.clock_in).toLocaleTimeString('ja-JP', {
-                            timeZone: 'Asia/Tokyo',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : '—'}
+                      {u.clock_in ? new Date(u.clock_in).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
                   </tr>
                 ))}
