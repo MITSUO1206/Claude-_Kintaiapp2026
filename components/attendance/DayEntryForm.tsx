@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { AttendanceRecord, WorkLocation } from '@/lib/types'
 
 interface DayEntryFormProps {
@@ -44,16 +44,6 @@ export function DayEntryForm({ selectedDate, record, onSaved }: DayEntryFormProp
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState('')
   const [saved,        setSaved]        = useState(false)
-
-  // 日付が変わったらフォームをリセット
-  useEffect(() => {
-    setClockIn(isoToHHMM(record?.clock_in ?? null))
-    setClockOut(isoToHHMM(record?.clock_out ?? null))
-    setBreakMinutes(record?.break_minutes ?? 60)
-    setWorkLocation(record?.work_location ?? null)
-    setError('')
-    setSaved(false)
-  }, [selectedDate, record])
 
   async function handleSave() {
     if (isLocked) return

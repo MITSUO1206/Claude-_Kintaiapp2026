@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { DayEntryForm } from './DayEntryForm'
 import { MonthCalendar } from './MonthCalendar'
 import { MonthSummary } from './MonthSummary'
@@ -12,11 +12,6 @@ interface UnifiedDashboardProps {
   initialDate: string
   initialRecord: AttendanceRecord | null
   initialMonthRecords: AttendanceRecord[]
-  initialSummary: {
-    total_days: number
-    total_minutes: number
-    overtime_minutes: number
-  }
   initialApproval: MonthlyApproval | null
   initialYear: number
   initialMonth: number
@@ -27,7 +22,6 @@ export function UnifiedDashboard({
   initialDate,
   initialRecord,
   initialMonthRecords,
-  initialSummary,
   initialApproval,
   initialYear,
   initialMonth,
@@ -35,21 +29,17 @@ export function UnifiedDashboard({
   const [selectedDate,   setSelectedDate]   = useState(initialDate)
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(initialRecord)
   const [monthRecords,   setMonthRecords]   = useState(initialMonthRecords)
-  const [summary,        setSummary]        = useState(initialSummary)
   const [approval,       setApproval]       = useState<MonthlyApproval | null>(initialApproval)
   const [year,           setYear]           = useState(initialYear)
   const [month,          setMonth]          = useState(initialMonth)
   const [loadingDate,    setLoadingDate]    = useState(false)
   const [loadingMonth,   setLoadingMonth]   = useState(false)
 
-  // monthRecords が変わるたびにサマリーを再計算
-  useEffect(() => {
-    setSummary({
-      total_days:       monthRecords.filter((r) => r.status === 'present').length,
-      total_minutes:    monthRecords.reduce((s, r) => s + (r.actual_minutes ?? 0), 0),
-      overtime_minutes: monthRecords.reduce((s, r) => s + (r.overtime_minutes ?? 0), 0),
-    })
-  }, [monthRecords])
+  const summary = useMemo(() => ({
+    total_days:       monthRecords.filter((r) => r.status === 'present').length,
+    total_minutes:    monthRecords.reduce((s, r) => s + (r.actual_minutes ?? 0), 0),
+    overtime_minutes: monthRecords.reduce((s, r) => s + (r.overtime_minutes ?? 0), 0),
+  }), [monthRecords])
 
   // 日付クリック → その日のレコードを取得してフォームに表示
   const handleSelectDate = useCallback(async (date: string) => {
@@ -127,6 +117,7 @@ export function UnifiedDashboard({
           </div>
         )}
         <DayEntryForm
+          key={selectedDate}
           selectedDate={selectedDate}
           record={selectedRecord}
           onSaved={handleSaved}

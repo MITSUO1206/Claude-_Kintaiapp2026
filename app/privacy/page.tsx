@@ -1,8 +1,10 @@
+import Link from 'next/link'
+
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b px-4 py-3">
-        <a href="/" className="font-bold text-blue-600 text-lg">KintaiApp</a>
+        <Link href="/" className="font-bold text-blue-600 text-lg">KintaiApp</Link>
       </header>
       <main className="max-w-2xl mx-auto p-6 space-y-6 text-sm text-gray-700">
         <h1 className="text-2xl font-bold text-gray-900">プライバシーポリシー</h1>
@@ -44,7 +46,7 @@ export default function PrivacyPage() {
         </section>
 
         <div className="pt-4 border-t">
-          <a href="/" className="text-blue-500 hover:underline text-sm">← トップに戻る</a>
+          <Link href="/" className="text-blue-500 hover:underline text-sm">← トップに戻る</Link>
         </div>
       </main>
     </div>

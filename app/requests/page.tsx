@@ -4,7 +4,7 @@ import { verifyJWT } from '@/lib/auth/jwt'
 import { withCompany } from '@/lib/db/withCompany'
 import { RequestForm } from '@/components/RequestForm'
 import { EmployeeSidebar } from '@/components/EmployeeSidebar'
-import type { Request, LeaveBalance } from '@/lib/types'
+import type { Request } from '@/lib/types'
 
 export default async function RequestsPage() {
   const cookieStore = await cookies()

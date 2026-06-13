@@ -48,19 +48,12 @@ export default async function DashboardPage() {
   const monthRecords  = ((monthRes.data ?? []) as unknown as AttendanceRecord[])
   const approval      = (approvalRes.data as unknown as MonthlyApproval | null)
 
-  const summary = {
-    total_days:       monthRecords.filter((r) => r.status === 'present').length,
-    total_minutes:    monthRecords.reduce((s, r) => s + (r.actual_minutes ?? 0), 0),
-    overtime_minutes: monthRecords.reduce((s, r) => s + (r.overtime_minutes ?? 0), 0),
-  }
-
   return (
     <UnifiedDashboard
       userName={payload.name}
       initialDate={today}
       initialRecord={todayRecord}
       initialMonthRecords={monthRecords}
-      initialSummary={summary}
       initialApproval={approval}
       initialYear={year}
       initialMonth={month}

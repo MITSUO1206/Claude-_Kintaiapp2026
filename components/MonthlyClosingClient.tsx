@@ -27,7 +27,6 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
   const [unlockId, setUnlockId] = useState<string | null>(null)
   const [unlockReason, setUnlockReason] = useState('')
 
-  const alreadyClosed = users.filter((u) => u.closed_at)
   const notClosed = users.filter((u) => !u.closed_at)
 
   async function closeAll() {

@@ -38,6 +38,65 @@ type RequestRow = {
 
 type UserRow = { id: string; name: string; employee_code: string }
 
+function RequestTable({
+  requests,
+  userMap,
+}: {
+  requests: RequestRow[]
+  userMap: Map<string, UserRow>
+}) {
+  if (requests.length === 0) {
+    return <p className="text-sm text-gray-400 p-4">申請はありません</p>
+  }
+  return (
+    <table className="w-full text-sm">
+      <thead className="bg-gray-50 border-b">
+        <tr>
+          <th className="px-3 py-2 text-left">社員</th>
+          <th className="px-3 py-2 text-left">種別</th>
+          <th className="px-3 py-2 text-left">対象日</th>
+          <th className="px-3 py-2 text-left">理由</th>
+          <th className="px-3 py-2 text-center">状態</th>
+          <th className="px-3 py-2 text-left">申請日</th>
+          <th className="px-3 py-2 text-left">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {requests.map((r) => {
+          const u = userMap.get(r.user_id)
+          return (
+            <tr key={r.id} className="border-b hover:bg-gray-50">
+              <td className="px-3 py-2">
+                <span className="font-medium">{u?.name ?? '—'}</span>
+                <span className="text-xs text-gray-400 ml-1">{u?.employee_code}</span>
+              </td>
+              <td className="px-3 py-2">{TYPE_LABELS[r.type] ?? r.type}</td>
+              <td className="px-3 py-2">{r.target_date ?? '—'}</td>
+              <td className="px-3 py-2 max-w-xs">
+                <p className="truncate">{r.reason}</p>
+                {r.status === 'rejected' && r.rejection_reason && (
+                  <p className="text-xs text-red-500 mt-0.5">却下: {r.rejection_reason}</p>
+                )}
+              </td>
+              <td className="px-3 py-2 text-center">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[r.status]}`}>
+                  {STATUS_LABELS[r.status] ?? r.status}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-gray-500">
+                {new Date(r.created_at).toLocaleDateString('ja-JP')}
+              </td>
+              <td className="px-3 py-2">
+                {r.status === 'pending' && <AdminRequestActions requestId={r.id} />}
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
 export default async function AdminRequestsPage() {
   const cookieStore = await cookies()
   const token = cookieStore.get('auth_token')?.value
@@ -71,59 +130,6 @@ export default async function AdminRequestsPage() {
   const pendingRows = rows.filter((r) => r.status === 'pending')
   const allRows = rows
 
-  function RequestTable({ requests }: { requests: RequestRow[] }) {
-    if (requests.length === 0) {
-      return <p className="text-sm text-gray-400 p-4">申請はありません</p>
-    }
-    return (
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b">
-          <tr>
-            <th className="px-3 py-2 text-left">社員</th>
-            <th className="px-3 py-2 text-left">種別</th>
-            <th className="px-3 py-2 text-left">対象日</th>
-            <th className="px-3 py-2 text-left">理由</th>
-            <th className="px-3 py-2 text-center">状態</th>
-            <th className="px-3 py-2 text-left">申請日</th>
-            <th className="px-3 py-2 text-left">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {requests.map((r) => {
-            const u = userMap.get(r.user_id)
-            return (
-              <tr key={r.id} className="border-b hover:bg-gray-50">
-                <td className="px-3 py-2">
-                  <span className="font-medium">{u?.name ?? '—'}</span>
-                  <span className="text-xs text-gray-400 ml-1">{u?.employee_code}</span>
-                </td>
-                <td className="px-3 py-2">{TYPE_LABELS[r.type] ?? r.type}</td>
-                <td className="px-3 py-2">{r.target_date ?? '—'}</td>
-                <td className="px-3 py-2 max-w-xs">
-                  <p className="truncate">{r.reason}</p>
-                  {r.status === 'rejected' && r.rejection_reason && (
-                    <p className="text-xs text-red-500 mt-0.5">却下: {r.rejection_reason}</p>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[r.status]}`}>
-                    {STATUS_LABELS[r.status] ?? r.status}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-gray-500">
-                  {new Date(r.created_at).toLocaleDateString('ja-JP')}
-                </td>
-                <td className="px-3 py-2">
-                  {r.status === 'pending' && <AdminRequestActions requestId={r.id} />}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    )
-  }
-
   return (
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar userName={payload.name} />
@@ -143,7 +149,7 @@ export default async function AdminRequestsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <RequestTable requests={pendingRows} />
+            <RequestTable requests={pendingRows} userMap={userMap} />
           </CardContent>
         </Card>
 
@@ -152,7 +158,7 @@ export default async function AdminRequestsPage() {
             <CardTitle className="text-base">全申請一覧</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <RequestTable requests={allRows} />
+            <RequestTable requests={allRows} userMap={userMap} />
           </CardContent>
         </Card>
       </main>

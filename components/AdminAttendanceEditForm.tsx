@@ -22,7 +22,7 @@ function fromJSTInput(dateStr: string, timeStr: string): string {
   return new Date(localISO).toISOString()
 }
 
-export function AdminAttendanceEditForm({ record, userName }: AdminAttendanceEditFormProps) {
+export function AdminAttendanceEditForm({ record }: AdminAttendanceEditFormProps) {
   const router = useRouter()
   const [clockIn, setClockIn]   = useState(toJSTInput(record.clock_in))
   const [clockOut, setClockOut] = useState(toJSTInput(record.clock_out))
