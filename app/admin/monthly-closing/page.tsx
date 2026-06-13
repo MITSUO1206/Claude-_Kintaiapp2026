@@ -1,9 +1,10 @@
-import { cookies } from 'next/headers'
+﻿import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { verifyJWT } from '@/lib/auth/jwt'
 import { withCompany } from '@/lib/db/withCompany'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MonthlyClosingClient } from '@/components/MonthlyClosingClient'
+import { AdminSidebar } from '@/components/AdminSidebar'
 
 type SearchParams = Promise<{ year?: string; month?: string }>
 
@@ -62,19 +63,8 @@ export default async function MonthlyClosingPage({ searchParams }: { searchParam
   const nextMonth = month === 12 ? 1 : month + 1
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-4 py-3 flex items-center justify-between">
-        <span className="font-bold text-blue-600 text-lg">KintaiApp 管理画面</span>
-        <div className="flex items-center gap-3">
-          <a href="/admin" className="text-xs text-blue-500 hover:underline">ダッシュボード</a>
-          <a href="/admin/attendance" className="text-xs text-blue-500 hover:underline">勤怠管理</a>
-          <a href="/admin/requests" className="text-xs text-blue-500 hover:underline">申請承認</a>
-          <span className="text-sm text-gray-600">{payload.name}</span>
-          <form action="/api/auth/logout" method="POST">
-            <button type="submit" className="text-xs text-gray-400 hover:text-gray-600">ログアウト</button>
-          </form>
-        </div>
-      </header>
+    <div className="flex min-h-screen bg-gray-50">
+      <AdminSidebar userName={payload.name} />
 
       <main className="max-w-4xl mx-auto p-4 space-y-4">
         <div className="flex items-center justify-between">

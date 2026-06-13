@@ -1,8 +1,9 @@
-import { cookies } from 'next/headers'
+﻿import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { verifyJWT } from '@/lib/auth/jwt'
 import { withCompany } from '@/lib/db/withCompany'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmployeeSidebar } from '@/components/EmployeeSidebar'
 import type { Payslip } from '@/lib/types'
 
 function yen(v: number) {
@@ -28,22 +29,11 @@ export default async function PayslipsPage() {
   const payslips = (data ?? []) as unknown as Partial<Payslip>[]
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-4 py-3 flex items-center justify-between">
-        <span className="font-bold text-blue-600 text-lg">KintaiApp</span>
-        <div className="flex items-center gap-3">
-          <a href="/dashboard" className="text-xs text-blue-500 hover:underline">ダッシュボード</a>
-          <a href="/attendance" className="text-xs text-blue-500 hover:underline">勤怠履歴</a>
-          <a href="/requests" className="text-xs text-blue-500 hover:underline">申請</a>
-          <span className="text-sm text-gray-600">{payload.name}</span>
-          <form action="/api/auth/logout" method="POST">
-            <button type="submit" className="text-xs text-gray-400 hover:text-gray-600">ログアウト</button>
-          </form>
-        </div>
-      </header>
+    <div className="flex min-h-screen bg-gray-50">
+      <EmployeeSidebar userName={payload.name} />
 
-      <main className="max-w-3xl mx-auto p-4">
-        <h1 className="text-xl font-bold mb-4">給与明細</h1>
+      <main className="flex-1 p-6 max-w-3xl">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6">給与明細</h1>
 
         {payslips.length === 0 ? (
           <Card>

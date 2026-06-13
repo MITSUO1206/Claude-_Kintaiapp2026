@@ -119,6 +119,30 @@ export async function sendOvertimeAlert(params: {
   }).catch((e) => console.error('resend overtime alert error:', e))
 }
 
+export async function sendMonthlyReminder(params: {
+  to: string
+  name: string
+  year: number
+  month: number
+}): Promise<void> {
+  const resend = getResend()
+  if (!resend) return
+  await resend.emails.send({
+    from: FROM,
+    to: [params.to],
+    subject: `【KintaiApp】${params.year}年${params.month}月の勤怠確認申請をお願いします`,
+    text: [
+      `${params.name} さん`,
+      '',
+      `${params.year}年${params.month}月の勤怠確認申請がまだ完了していません。`,
+      '',
+      '勤怠履歴画面から「今月の勤怠を確定申請する」ボタンを押してください。',
+      '',
+      '月次締め処理が完了できないため、お早めにご対応をお願いします。',
+    ].join('\n'),
+  }).catch((e) => console.error('resend reminder error:', e))
+}
+
 export async function sendPayslipPublished(params: {
   to: string
   name: string

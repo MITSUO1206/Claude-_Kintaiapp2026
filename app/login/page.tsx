@@ -93,6 +93,11 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={!isValid || loading}>
               {loading ? 'ログイン中...' : 'ログイン'}
             </Button>
+            <p className="text-center text-sm">
+              <a href="/forgot-password" className="text-blue-500 hover:underline text-xs">
+                パスワードを忘れた場合
+              </a>
+            </p>
           </form>
           <p className="text-xs text-gray-400 text-center mt-4">
             ※ 管理者から配布された会社IDと社員番号でログイン

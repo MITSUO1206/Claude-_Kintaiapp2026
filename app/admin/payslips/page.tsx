@@ -5,10 +5,13 @@ import { withCompany } from '@/lib/db/withCompany'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AdminPayslipControls } from '@/components/AdminPayslipControls'
 import type { Payslip } from '@/lib/types'
+import { AdminSidebar } from '@/components/AdminSidebar'
 
-type SearchParams = Promise<{ year?: string; month?: string }>
+type SearchParams = Promise<{ year?: string; month?: string; user_id?: string; status?: string }>
 
 function yen(v: number) { return `¥${Math.round(v).toLocaleString()}` }
+
+type UserRow = { id: string; name: string; employee_code: string }
 
 export default async function AdminPayslipsPage({ searchParams }: { searchParams: SearchParams }) {
   const cookieStore = await cookies()
@@ -22,54 +25,43 @@ export default async function AdminPayslipsPage({ searchParams }: { searchParams
 
   const sp = await searchParams
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
-  const year  = sp.year  ? parseInt(sp.year)  : now.getFullYear()
-  const month = sp.month ? parseInt(sp.month) : now.getMonth() + 1
+  const year   = sp.year   ? parseInt(sp.year)   : now.getFullYear()
+  const month  = sp.month  ? parseInt(sp.month)  : now.getMonth() + 1
+  const filterUserId = sp.user_id ?? ''
+  const filterStatus = sp.status  ?? ''
 
   const db = withCompany(payload.company_id)
 
-  const { data: payslips } = await db
-    .select('payslips', '*')
-    .eq('year', year)
-    .eq('month', month)
-    .order('user_id')
+  const [payslipsRes, allUsersRes] = await Promise.all([
+    db.select('payslips', '*').eq('year', year).eq('month', month).order('user_id'),
+    db.select('users', 'id, name, employee_code').eq('is_active', true).order('employee_code', { ascending: true }),
+  ])
 
-  const rows = (payslips ?? []) as unknown as Payslip[]
-  const userIds = rows.map((r) => r.user_id)
+  const allUsers = ((allUsersRes.data ?? []) as unknown as UserRow[])
+  let rows = (payslipsRes.data ?? []) as unknown as (Payslip & { status: string })[]
 
-  const { data: users } = userIds.length > 0
+  if (filterUserId) rows = rows.filter((r) => r.user_id === filterUserId)
+  if (filterStatus) rows = rows.filter((r) => r.status === filterStatus)
+
+  const userIds = [...new Set(rows.map((r) => r.user_id))]
+  const { data: usersForRows } = userIds.length > 0
     ? await db.select('users', 'id, name, employee_code').in('id', userIds)
     : { data: [] }
+  const userMap = new Map(((usersForRows ?? []) as unknown as UserRow[]).map((u) => [u.id, u]))
 
-  type UserRow = { id: string; name: string; employee_code: string }
-  const userMap = new Map(((users ?? []) as unknown as UserRow[]).map((u) => [u.id, u]))
-
-  const prevYear = month === 1 ? year - 1 : year
-  const prevMonth = month === 1 ? 12 : month - 1
-  const nextYear = month === 12 ? year + 1 : year
-  const nextMonth = month === 12 ? 1 : month + 1
+  const prevYear  = month === 1  ? year - 1 : year
+  const prevMonth = month === 1  ? 12 : month - 1
+  const nextYear  = month === 12 ? year + 1 : year
+  const nextMonth = month === 12 ? 1  : month + 1
 
   const totalGross = rows.reduce((s, r) => s + r.gross_pay, 0)
-  const totalNet   = rows.reduce((s, r) => s + r.net_pay, 0)
+  const totalNet   = rows.reduce((s, r) => s + r.net_pay,   0)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-4 py-3 flex items-center justify-between">
-        <span className="font-bold text-blue-600 text-lg">KintaiApp 管理画面</span>
-        <div className="flex items-center gap-3">
-          <a href="/admin" className="text-xs text-blue-500 hover:underline">ダッシュボード</a>
-          <a href="/admin/attendance" className="text-xs text-blue-500 hover:underline">勤怠</a>
-          <a href="/admin/requests" className="text-xs text-blue-500 hover:underline">申請</a>
-          <a href="/admin/monthly-closing" className="text-xs text-blue-500 hover:underline">月次締め</a>
-          <a href="/admin/users" className="text-xs text-blue-500 hover:underline">社員管理</a>
-          <a href="/admin/payslip-templates" className="text-xs text-blue-500 hover:underline">テンプレート</a>
-          <span className="text-sm text-gray-600">{payload.name}</span>
-          <form action="/api/auth/logout" method="POST">
-            <button type="submit" className="text-xs text-gray-400 hover:text-gray-600">ログアウト</button>
-          </form>
-        </div>
-      </header>
+    <div className="flex min-h-screen bg-gray-50">
+      <AdminSidebar userName={payload.name} />
 
-      <main className="max-w-5xl mx-auto p-4 space-y-4">
+      <main className="flex-1 p-6 space-y-4 max-w-5xl">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h1 className="text-xl font-bold">給与明細管理</h1>
           <div className="flex items-center gap-2">
@@ -80,6 +72,27 @@ export default async function AdminPayslipsPage({ searchParams }: { searchParams
         </div>
 
         <AdminPayslipControls year={year} month={month} />
+
+        {/* 絞り込みフォーム */}
+        <form method="GET" className="flex gap-2 flex-wrap bg-white p-3 rounded-lg border text-sm">
+          <input type="hidden" name="year"  value={year}  />
+          <input type="hidden" name="month" value={month} />
+          <select name="user_id" defaultValue={filterUserId} className="border rounded px-2 py-1">
+            <option value="">全社員</option>
+            {allUsers.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}（{u.employee_code}）</option>
+            ))}
+          </select>
+          <select name="status" defaultValue={filterStatus} className="border rounded px-2 py-1">
+            <option value="">全ステータス</option>
+            <option value="draft">下書き</option>
+            <option value="published">公開済</option>
+          </select>
+          <button type="submit" className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">絞り込み</button>
+          {(filterUserId || filterStatus) && (
+            <a href={`/admin/payslips?year=${year}&month=${month}`} className="text-xs text-gray-400 hover:text-gray-600 self-center">クリア</a>
+          )}
+        </form>
 
         {rows.length > 0 && (
           <div className="grid grid-cols-2 gap-3">
@@ -101,10 +114,10 @@ export default async function AdminPayslipsPage({ searchParams }: { searchParams
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
-              <span>{year}年{month}月 明細一覧</span>
+              <span>{year}年{month}月 明細一覧 {(filterUserId || filterStatus) && <span className="text-xs font-normal text-gray-400">（絞り込み中）</span>}</span>
               {rows.length > 0 && (
                 <a
-                  href={`/api/admin/payslips/export?year=${year}&month=${month}`}
+                  href={`/api/admin/payslips/export?year=${year}&month=${month}${filterUserId ? `&user_id=${filterUserId}` : ''}`}
                   className="text-xs text-blue-500 hover:underline"
                 >
                   賃金台帳CSV (28列) ダウンロード
@@ -144,8 +157,8 @@ export default async function AdminPayslipsPage({ searchParams }: { searchParams
                         <td className="px-3 py-2 text-center">{p.work_days}日</td>
                         <td className="px-3 py-2 text-center">{Number(p.overtime_hours).toFixed(1)}</td>
                         <td className="px-3 py-2 text-center">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${(p as unknown as {status: string}).status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                            {(p as unknown as {status: string}).status === 'published' ? '公開済' : '下書き'}
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {p.status === 'published' ? '公開済' : '下書き'}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-center">
