@@ -10,7 +10,7 @@ export default function ForgotPasswordPage() {
   const [form, setForm] = useState({ company_code: '', employee_code: '' })
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
-  const [tempPassword, setTempPassword] = useState<string | null>(null)
+  const [requireAdmin, setRequireAdmin] = useState(false)
   const [error, setError] = useState('')
 
   const isValid = form.company_code.trim() && form.employee_code.trim()
@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
         setError(data.error ?? 'エラーが発生しました')
         return
       }
-      setTempPassword(data.tempPassword ?? null)
+      setRequireAdmin(data.requireAdmin === true)
       setDone(true)
     } catch {
       setError('ネットワークエラーが発生しました')
@@ -55,16 +55,12 @@ export default function ForgotPasswordPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              {tempPassword ? (
+              {requireAdmin ? (
                 <>
-                  <p className="text-gray-700 font-medium">仮パスワードを発行しました</p>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-left">
-                    <p className="text-xs text-yellow-700 mb-1 font-medium">仮パスワード（控えてください）</p>
-                    <p className="text-lg font-mono font-bold tracking-widest text-gray-800 select-all">{tempPassword}</p>
-                  </div>
+                  <p className="text-gray-700 font-medium">管理者にお問い合わせください</p>
                   <p className="text-sm text-gray-500">
-                    上記の仮パスワードでログインしてください。<br />
-                    初回ログイン後にパスワードの変更が求められます。
+                    メール通知が設定されていないため、パスワードのリセットは管理者が行います。<br />
+                    管理者にパスワードリセットを依頼してください。
                   </p>
                 </>
               ) : (

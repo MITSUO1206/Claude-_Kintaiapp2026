@@ -49,9 +49,22 @@ export async function POST(request: NextRequest) {
 
     const typedUser = user as { id: string; name: string; email: string | null }
 
+    // メール送信できない場合はパスワードをリセットしない（管理者経由でのリセットを促す）
+    if (!process.env.RESEND_API_KEY || !typedUser.email) {
+      return NextResponse.json({ ok: true, requireAdmin: true })
+    }
+
     const tempPassword = generateTempPassword()
     const passwordHash = await bcrypt.hash(tempPassword, 10)
 
+    const { sendPasswordReset } = await import('@/lib/email/resend')
+    await sendPasswordReset({
+      to: typedUser.email,
+      name: typedUser.name,
+      tempPassword,
+    })
+
+    // メール送信成功後にのみパスワードを更新する
     await supabaseAdmin
       .from('users')
       .update({
@@ -62,19 +75,7 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', typedUser.id)
 
-    // メール送信可能な場合はメール送信してパスワードを返さない
-    if (process.env.RESEND_API_KEY && typedUser.email) {
-      const { sendPasswordReset } = await import('@/lib/email/resend')
-      await sendPasswordReset({
-        to: typedUser.email,
-        name: typedUser.name,
-        tempPassword,
-      })
-      return NextResponse.json({ ok: true })
-    }
-
-    // メール未設定 or RESEND未設定の場合は画面に仮パスワードを表示
-    return NextResponse.json({ ok: true, tempPassword })
+    return NextResponse.json({ ok: true })
   } catch {
     return NextResponse.json<ApiError>({ error: 'サーバーエラーが発生しました' }, { status: 500 })
   }
