@@ -141,7 +141,14 @@ export default async function AdminPage() {
                 {userList.map((u) => (
                   <tr key={u.id} className="border-b hover:bg-gray-50">
                     <td className="px-3 py-2 text-gray-500">{u.employee_code}</td>
-                    <td className="px-3 py-2 font-medium">{u.name}</td>
+                    <td className="px-3 py-2 font-medium">
+                      <a
+                        href={`/admin/attendance/${u.id}`}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {u.name}
+                      </a>
+                    </td>
                     <td className="px-3 py-2 text-center">
                       {u.today_status === 'clocked_in' && <Badge className="bg-green-500 text-white text-xs">出勤中</Badge>}
                       {u.today_status === 'clocked_out' && <Badge variant="secondary" className="text-xs">退勤済</Badge>}

@@ -27,11 +27,7 @@ export default async function DashboardPage() {
   const lastDay = new Date(year, month, 0).getDate()
   const monthTo = `${y}-${m}-${String(lastDay).padStart(2, '0')}`
 
-  const [todayRes, monthRes, approvalRes] = await Promise.all([
-    db.select('attendance_records')
-      .eq('user_id', payload.user_id)
-      .eq('work_date', today)
-      .single(),
+  const [monthRes, approvalRes] = await Promise.all([
     db.select('attendance_records')
       .eq('user_id', payload.user_id)
       .gte('work_date', monthFrom)
@@ -44,15 +40,13 @@ export default async function DashboardPage() {
       .single(),
   ])
 
-  const todayRecord   = (todayRes.data as unknown as AttendanceRecord | null)
-  const monthRecords  = ((monthRes.data ?? []) as unknown as AttendanceRecord[])
-  const approval      = (approvalRes.data as unknown as MonthlyApproval | null)
+  const monthRecords = ((monthRes.data ?? []) as unknown as AttendanceRecord[])
+  const approval     = (approvalRes.data as unknown as MonthlyApproval | null)
 
   return (
     <UnifiedDashboard
       userName={payload.name}
-      initialDate={today}
-      initialRecord={todayRecord}
+      userId={payload.user_id}
       initialMonthRecords={monthRecords}
       initialApproval={approval}
       initialYear={year}

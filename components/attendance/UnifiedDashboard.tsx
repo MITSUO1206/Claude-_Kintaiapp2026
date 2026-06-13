@@ -1,16 +1,14 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { DayEntryForm } from './DayEntryForm'
-import { MonthCalendar } from './MonthCalendar'
+import { AttendanceTable } from './AttendanceTable'
 import { MonthSummary } from './MonthSummary'
 import { ApprovalBanner } from './ApprovalBanner'
 import type { AttendanceRecord, MonthlyApproval } from '@/lib/types'
 
 interface UnifiedDashboardProps {
   userName: string
-  initialDate: string
-  initialRecord: AttendanceRecord | null
+  userId: string
   initialMonthRecords: AttendanceRecord[]
   initialApproval: MonthlyApproval | null
   initialYear: number
@@ -19,21 +17,17 @@ interface UnifiedDashboardProps {
 
 export function UnifiedDashboard({
   userName,
-  initialDate,
-  initialRecord,
+  userId,
   initialMonthRecords,
   initialApproval,
   initialYear,
   initialMonth,
 }: UnifiedDashboardProps) {
-  const [selectedDate,   setSelectedDate]   = useState(initialDate)
-  const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(initialRecord)
-  const [monthRecords,   setMonthRecords]   = useState(initialMonthRecords)
-  const [approval,       setApproval]       = useState<MonthlyApproval | null>(initialApproval)
-  const [year,           setYear]           = useState(initialYear)
-  const [month,          setMonth]          = useState(initialMonth)
-  const [loadingDate,    setLoadingDate]    = useState(false)
-  const [loadingMonth,   setLoadingMonth]   = useState(false)
+  const [monthRecords, setMonthRecords] = useState(initialMonthRecords)
+  const [approval,     setApproval]     = useState<MonthlyApproval | null>(initialApproval)
+  const [year,         setYear]         = useState(initialYear)
+  const [month,        setMonth]        = useState(initialMonth)
+  const [loading,      setLoading]      = useState(false)
 
   const summary = useMemo(() => ({
     total_days:       monthRecords.filter((r) => r.status === 'present').length,
@@ -41,61 +35,31 @@ export function UnifiedDashboard({
     overtime_minutes: monthRecords.reduce((s, r) => s + (r.overtime_minutes ?? 0), 0),
   }), [monthRecords])
 
-  // 日付クリック → その日のレコードを取得してフォームに表示
-  const handleSelectDate = useCallback(async (date: string) => {
-    setSelectedDate(date)
-    const [y, m] = date.split('-')
-    const dateYear  = parseInt(y)
-    const dateMonth = parseInt(m)
-
-    // 同月内ならキャッシュ済み monthRecords から取得（API 不要）
-    if (dateYear === year && dateMonth === month) {
-      setSelectedRecord(monthRecords.find((r) => r.work_date === date) ?? null)
-      return
-    }
-
-    // 別月なら API から取得
-    setLoadingDate(true)
-    try {
-      const res = await fetch(`/api/attendance?year=${dateYear}&month=${dateMonth}`)
-      if (res.ok) {
-        const data = await res.json()
-        const rec = (data.records as AttendanceRecord[]).find((r) => r.work_date === date) ?? null
-        setSelectedRecord(rec)
-      }
-    } finally {
-      setLoadingDate(false)
-    }
-  }, [year, month, monthRecords])
-
-  // 月変更 → その月のレコードと承認状況を再取得
   const handleMonthChange = useCallback(async (newYear: number, newMonth: number) => {
     setYear(newYear)
     setMonth(newMonth)
-    setLoadingMonth(true)
+    setLoading(true)
     try {
       const [recordsRes, approvalRes] = await Promise.all([
         fetch(`/api/attendance?year=${newYear}&month=${newMonth}`),
         fetch(`/api/approvals?year=${newYear}&month=${newMonth}`),
       ])
       if (recordsRes.ok) {
-        const data = await recordsRes.json()
+        const data = await recordsRes.json() as { records?: AttendanceRecord[] }
         setMonthRecords(data.records ?? [])
       }
       if (approvalRes.ok) {
-        const data = await approvalRes.json()
+        const data = await approvalRes.json() as { approval?: MonthlyApproval }
         setApproval(data.approval ?? null)
       } else {
         setApproval(null)
       }
     } finally {
-      setLoadingMonth(false)
+      setLoading(false)
     }
   }, [])
 
-  // 保存後 → 月次レコードを更新（summary は useEffect が追従する）
   const handleSaved = useCallback((record: AttendanceRecord) => {
-    setSelectedRecord(record)
     setMonthRecords((prev) => {
       const idx = prev.findIndex((r) => r.work_date === record.work_date)
       if (idx >= 0) {
@@ -109,30 +73,39 @@ export function UnifiedDashboard({
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* 左パネル */}
-      <div className="w-72 min-w-72 bg-white border-r border-gray-100 p-5 flex flex-col relative">
-        {loadingDate && (
-          <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-xl z-10">
-            <span className="text-xs text-gray-400">読み込み中...</span>
-          </div>
-        )}
-        <DayEntryForm
-          key={selectedDate}
-          selectedDate={selectedDate}
-          record={selectedRecord}
-          onSaved={handleSaved}
-        />
-      </div>
-
-      {/* 右パネル */}
-      <main className="flex-1 p-6 max-w-4xl">
-        <div className="mb-4">
-          <h1 className="text-xl font-bold text-gray-800">勤怠管理</h1>
-          <p className="text-sm text-gray-400">{userName}さんの勤怠</p>
+      {/* サイドバー */}
+      <aside className="w-44 min-h-screen bg-slate-800 flex flex-col flex-shrink-0">
+        <div className="px-4 py-4 border-b border-slate-700">
+          <span className="text-white font-bold text-base">KintaiApp</span>
+          <p className="text-slate-400 text-xs mt-0.5">勤怠・給与管理</p>
         </div>
+        <nav className="flex-1 px-2 py-3 space-y-1">
+          {[
+            { href: '/dashboard', label: 'ダッシュボード' },
+            { href: '/requests', label: '申請' },
+            { href: '/payslips', label: '給与明細' },
+          ].map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+        <div className="px-3 py-3 border-t border-slate-700">
+          <p className="text-slate-300 text-xs truncate mb-2">{userName}</p>
+          <a href="/api/auth/logout" className="text-slate-400 hover:text-slate-200 text-xs transition-colors">
+            ログアウト
+          </a>
+        </div>
+      </aside>
 
-        {/* 月次サマリー */}
-        <div className="mb-4">
+      {/* メインコンテンツ */}
+      <main className="flex-1 flex flex-col min-h-screen">
+        {/* サマリーバー */}
+        <div className="px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0">
           <MonthSummary
             totalDays={summary.total_days}
             totalMinutes={summary.total_minutes}
@@ -140,25 +113,28 @@ export function UnifiedDashboard({
           />
         </div>
 
-        {/* カレンダー */}
-        <div className={`bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-4 ${loadingMonth ? 'opacity-60' : ''}`}>
-          <MonthCalendar
+        {/* 勤怠テーブル */}
+        <div className={`flex-1 bg-white ${loading ? 'opacity-60 pointer-events-none' : ''}`}>
+          <AttendanceTable
+            records={monthRecords}
             year={year}
             month={month}
-            records={monthRecords}
-            selectedDate={selectedDate}
-            onSelectDate={handleSelectDate}
+            userId={userId}
+            isAdmin={false}
+            onSaved={handleSaved}
             onMonthChange={handleMonthChange}
           />
         </div>
 
-        {/* 締め承認 */}
-        <ApprovalBanner
-          year={year}
-          month={month}
-          approval={approval}
-          onSubmitted={setApproval}
-        />
+        {/* 締め承認バナー */}
+        <div className="px-6 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+          <ApprovalBanner
+            year={year}
+            month={month}
+            approval={approval}
+            onSubmitted={setApproval}
+          />
+        </div>
       </main>
     </div>
   )
