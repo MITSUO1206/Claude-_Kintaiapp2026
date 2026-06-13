@@ -56,6 +56,15 @@ const navItems = [
     ),
   },
   {
+    href: '/admin/employee-db',
+    label: '社員DB',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M3 6h18M3 18h18" />
+      </svg>
+    ),
+  },
+  {
     href: '/admin/users',
     label: '社員管理',
     icon: (

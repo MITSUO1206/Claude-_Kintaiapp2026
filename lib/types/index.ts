@@ -218,3 +218,33 @@ export interface MonthlyApproval {
   approved_by: string | null
   created_at: string
 }
+
+export type EmployeeFieldCategory = 'allowance' | 'deduction'
+
+export interface EmployeeFieldDef {
+  id: string
+  company_id: string
+  label: string
+  category: EmployeeFieldCategory
+  sort_order: number
+  is_active: boolean
+  created_at: string
+}
+
+export interface EmployeeFieldValue {
+  id?: string
+  field_id: string | null
+  label: string
+  category: EmployeeFieldCategory
+  amount: number
+}
+
+export interface EmployeeDbRow {
+  id: string
+  employee_code: string
+  name: string
+  salary_type: SalaryType
+  base_salary: number
+  is_active: boolean
+  values: EmployeeFieldValue[]
+}
