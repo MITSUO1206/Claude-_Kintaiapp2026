@@ -31,8 +31,6 @@ export default async function AdminPage() {
       <AdminSidebar userName={payload.name} pendingCount={pendingCount} />
 
       <main className="flex-1 p-6 max-w-3xl">
-        <h1 className="text-2xl font-bold text-gray-800 mb-4">出退勤状況</h1>
-
         <Card>
           <CardHeader>
             <CardTitle className="text-base">全社員一覧</CardTitle>
@@ -43,6 +41,7 @@ export default async function AdminPage() {
                 <tr>
                   <th className="px-3 py-2 text-left">社員番号</th>
                   <th className="px-3 py-2 text-left">氏名</th>
+                  <th className="px-3 py-2 text-center">勤怠編集</th>
                 </tr>
               </thead>
               <tbody>
@@ -50,11 +49,19 @@ export default async function AdminPage() {
                   <tr key={u.id} className="border-b hover:bg-gray-50">
                     <td className="px-3 py-2 text-gray-500">{u.employee_code}</td>
                     <td className="px-3 py-2 font-medium">{u.name}</td>
+                    <td className="px-3 py-2 text-center">
+                      <a
+                        href={`/admin/attendance/${u.id}`}
+                        className="text-xs text-blue-500 hover:underline"
+                      >
+                        勤怠編集
+                      </a>
+                    </td>
                   </tr>
                 ))}
                 {allUsers.length === 0 && (
                   <tr>
-                    <td colSpan={2} className="px-4 py-8 text-center text-gray-400 text-sm">
+                    <td colSpan={3} className="px-4 py-8 text-center text-gray-400 text-sm">
                       社員が登録されていません
                     </td>
                   </tr>

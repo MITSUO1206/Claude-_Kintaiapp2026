@@ -14,7 +14,7 @@ function getNowJST(): { year: number; month: number } {
 }
 
 export default async function AdminAttendancePage(
-  { params }: { params: Promise<{ userId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const cookieStore = await cookies()
   const token = cookieStore.get('auth_token')?.value
@@ -24,7 +24,7 @@ export default async function AdminAttendancePage(
   if (!payload) redirect('/login')
   if (payload.role !== 'admin' && payload.role !== 'manager') redirect('/dashboard')
 
-  const { userId } = await params
+  const { id: userId } = await params
   const db = withCompany(payload.company_id)
   const { year, month } = getNowJST()
   const monthFrom = `${year}-${String(month).padStart(2, '0')}-01`
