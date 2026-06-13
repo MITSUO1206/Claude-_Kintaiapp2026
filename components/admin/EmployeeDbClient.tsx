@@ -31,6 +31,12 @@ export function EmployeeDbClient({ initialEmployees, initialFields }: EmployeeDb
   }
 
   function exportCSV() {
+    const esc = (v: unknown): string => {
+      let s = String(v ?? '')
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s
+      if (/[",\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"'
+      return s
+    }
     const headers = ['社員番号', '氏名', '種別', '基本給/時給', ...fieldDefs.map((f) => f.label)]
     const rows = employees.map((emp) => [
       emp.employee_code,
@@ -39,7 +45,7 @@ export function EmployeeDbClient({ initialEmployees, initialFields }: EmployeeDb
       emp.base_salary,
       ...fieldDefs.map((f) => emp.values.find((v) => v.field_id === f.id)?.amount ?? 0),
     ])
-    const csv = [headers, ...rows].map((r) => r.join(',')).join('\n')
+    const csv = [headers, ...rows].map((r) => r.map(esc).join(',')).join('\r\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
