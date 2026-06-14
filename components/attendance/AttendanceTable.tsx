@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { AttendanceRecord, WorkLocation } from '@/lib/types'
+
+const DEFAULT_SHIFTS = ['0800-1645', '0900-1745', '休日', '年休']
 
 interface AttendanceTableProps {
   records: AttendanceRecord[]
@@ -17,10 +19,6 @@ const WORK_LOCATION_LABELS: Record<string, string> = {
   office: 'オフィス', home: '自宅', satellite: 'サテライト', other: 'その他',
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  present: '出勤', absent: '欠勤', late: '遅刻',
-  leave_paid: '有給', leave_special: '特休',
-}
 
 function isoToHHMM(iso: string | null | undefined): string {
   if (!iso) return ''
@@ -41,6 +39,7 @@ function pad(n: number): string {
 }
 
 interface EditState {
+  shiftType: string
   clockIn: string
   clockOut: string
   breakMinutes: number
@@ -52,10 +51,20 @@ export function AttendanceTable({
 }: AttendanceTableProps) {
   const [editingDate, setEditingDate] = useState<string | null>(null)
   const [editState, setEditState] = useState<EditState>({
-    clockIn: '', clockOut: '', breakMinutes: 60, workLocation: '',
+    shiftType: '0900-1745', clockIn: '', clockOut: '', breakMinutes: 60, workLocation: '',
   })
+  const [shiftTypes, setShiftTypes] = useState<string[]>(DEFAULT_SHIFTS)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/api/shift-types')
+      .then((r) => r.json())
+      .then((d: { shift_types?: string[] }) => {
+        if (Array.isArray(d.shift_types) && d.shift_types.length > 0) setShiftTypes(d.shift_types)
+      })
+      .catch(() => {})
+  }, [])
 
   const recordMap = new Map(records.map((r) => [r.work_date, r]))
 
@@ -66,6 +75,7 @@ export function AttendanceTable({
   function startEdit(dateStr: string) {
     const rec = recordMap.get(dateStr)
     setEditState({
+      shiftType:    rec?.shift_type ?? '0900-1745',
       clockIn:      isoToHHMM(rec?.clock_in),
       clockOut:     isoToHHMM(rec?.clock_out),
       breakMinutes: rec?.break_minutes ?? 60,
@@ -87,6 +97,7 @@ export function AttendanceTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           work_date:     dateStr,
+          shift_type:    editState.shiftType || null,
           clock_in:      editState.clockIn  || null,
           clock_out:     editState.clockOut || null,
           break_minutes: editState.breakMinutes,
@@ -187,17 +198,18 @@ export function AttendanceTable({
 
                   {/* 区分 */}
                   <td className="px-3 py-1.5 text-center">
-                    {rec?.status ? (
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                        rec.status === 'present'    ? 'bg-green-100 text-green-700' :
-                        rec.status === 'leave_paid' ? 'bg-blue-100 text-blue-700'  :
-                        rec.status === 'absent'     ? 'bg-red-100 text-red-700'    :
-                        'bg-gray-100 text-gray-600'
-                      }`}>
-                        {STATUS_LABELS[rec.status] ?? rec.status}
-                      </span>
-                    ) : isWeekend ? (
-                      <span className="text-xs text-gray-300">休日</span>
+                    {isEditing ? (
+                      <select
+                        value={editState.shiftType}
+                        onChange={(e) => setEditState((s) => ({ ...s, shiftType: e.target.value }))}
+                        className="border border-blue-300 rounded px-1 py-0.5 text-xs w-28"
+                      >
+                        {shiftTypes.map((st) => (
+                          <option key={st} value={st}>{st}</option>
+                        ))}
+                      </select>
+                    ) : rec?.shift_type ? (
+                      <span className="text-xs text-gray-700">{rec.shift_type}</span>
                     ) : (
                       <span className="text-xs text-gray-300">—</span>
                     )}
