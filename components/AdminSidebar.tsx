@@ -85,7 +85,7 @@ const navItems = [
   },
 ]
 
-export function AdminSidebar({ userName, pendingCount = 0 }: Props) {
+export function AdminSidebar({ userName }: Props) {
   const pathname = usePathname()
 
   return (
@@ -114,11 +114,6 @@ export function AdminSidebar({ userName, pendingCount = 0 }: Props) {
             >
               {item.icon}
               <span className="flex-1">{item.label}</span>
-              {item.badge && pendingCount > 0 && (
-                <span className="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none">
-                  {pendingCount}
-                </span>
-              )}
             </a>
           )
         })}
