@@ -28,23 +28,33 @@ async function adjustLeaveBalance(
   const isLeave  = newStatus === 'leave_paid'
   if (wasLeave === isLeave) return newStatus
 
-  const { data: lbData } = await db
-    .select('leave_balances', 'id, total_days, used_days')
+  // db.raw で直接クエリ（leave_balances に company_id 列がない場合も対応）
+  const { data: lbData } = await db.raw
+    .from('leave_balances')
+    .select('id, total_days, used_days')
     .eq('user_id', userId)
     .eq('fiscal_year', fiscalYear)
     .single()
-  const lb = lbData as unknown as LBRow | null
+  const lb = lbData as LBRow | null
 
   if (isLeave && !wasLeave) {
     const remaining = (lb?.total_days ?? 0) - (lb?.used_days ?? 0)
     if (remaining <= 0) return 'absent'
-    if (lb) await db.update('leave_balances', { used_days: lb.used_days + 1 }).eq('id', lb.id)
+    if (lb) {
+      await db.raw
+        .from('leave_balances')
+        .update({ used_days: lb.used_days + 1 })
+        .eq('id', lb.id)
+    }
     return 'leave_paid'
   }
 
   // wasLeave && !isLeave: 年休 → 他区分 なら消化日数を戻す
   if (lb && lb.used_days > 0) {
-    await db.update('leave_balances', { used_days: lb.used_days - 1 }).eq('id', lb.id)
+    await db.raw
+      .from('leave_balances')
+      .update({ used_days: lb.used_days - 1 })
+      .eq('id', lb.id)
   }
   return newStatus
 }
