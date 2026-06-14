@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
       .order('sort_order', { ascending: false })
 
-    const rows = (existing ?? []) as { sort_order: number }[]
+    const rows = (existing ?? []) as unknown as { sort_order: number }[]
     const nextOrder = rows.length > 0 ? rows[0].sort_order + 1 : 0
 
     const { error } = await db.insert('shift_types', {
