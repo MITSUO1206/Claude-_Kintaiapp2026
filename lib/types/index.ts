@@ -40,6 +40,19 @@ export interface User {
   force_password_change: boolean
   is_active: boolean
   hired_at: string
+  employment_type: string
+  weekly_working_days: number
+  created_at: string
+}
+
+export interface LeaveGrant {
+  id: string
+  company_id: string
+  user_id: string
+  grant_date: string
+  granted_days: number
+  basis: string
+  note: string | null
   created_at: string
 }
 

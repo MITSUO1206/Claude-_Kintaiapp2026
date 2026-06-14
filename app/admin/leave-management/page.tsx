@@ -2,26 +2,24 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { verifyJWT } from '@/lib/auth/jwt'
 import { withCompany } from '@/lib/db/withCompany'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { AdminSidebar } from '@/components/AdminSidebar'
-import { LeaveGrantClient } from '@/components/admin/LeaveGrantClient'
+import { LeaveManagementTable } from '@/components/admin/LeaveManagementTable'
+import { processAutoGrants } from '@/lib/leave/autoGrant'
+import { calcTenureStr, getNextGrantCycle, toDateStr } from '@/lib/leave/grantCalc'
+import type { LeaveUserRow } from '@/components/admin/LeaveManagementTable'
 
-type UserRow = { id: string; employee_code: string; name: string; hired_at: string; role: string }
-type BalanceRow = { user_id: string; total_days: number; used_days: number }
-
-function calcGrantDays(hiredAt: string): number {
-  const hired = new Date(hiredAt)
-  const now = new Date()
-  const months = (now.getFullYear() - hired.getFullYear()) * 12 + (now.getMonth() - hired.getMonth())
-  if (months < 6)  return 0
-  if (months < 18) return 10
-  if (months < 30) return 11
-  if (months < 42) return 12
-  if (months < 54) return 14
-  if (months < 66) return 16
-  if (months < 78) return 18
-  return 20
+type UserRow = {
+  id: string
+  company_id: string
+  employee_code: string
+  name: string
+  hired_at: string
+  employment_type: string
+  weekly_working_days: number
 }
+type BalanceRow = { user_id: string; total_days: number; used_days: number }
+type GrantRow   = { user_id: string; grant_date: string; granted_days: number; basis: string; note: string | null }
 
 export default async function LeaveManagementPage() {
   const cookieStore = await cookies()
@@ -35,88 +33,92 @@ export default async function LeaveManagementPage() {
   const db = withCompany(payload.company_id)
   const fiscalYear = new Date().getFullYear()
 
-  const [usersRes, balancesRes] = await Promise.all([
-    db.select('users', 'id, employee_code, name, hired_at, role')
-      .eq('is_active', true)
-      .order('employee_code', { ascending: true }),
-    db.select('leave_balances', 'user_id, total_days, used_days')
-      .eq('fiscal_year', fiscalYear),
+  // ユーザー一覧
+  const { data: usersData } = await db
+    .select('users', 'id, company_id, employee_code, name, hired_at, employment_type, weekly_working_days, role')
+    .eq('is_active', true)
+    .order('employee_code', { ascending: true })
+
+  const users = ((usersData ?? []) as unknown as (UserRow & { role: string })[])
+    .filter((u) => u.role !== 'admin')
+
+  // 遅延評価: 未処理の付与サイクルを処理
+  await Promise.allSettled(
+    users.map((u) =>
+      processAutoGrants({
+        id:                  u.id,
+        company_id:          u.company_id,
+        hired_at:            u.hired_at,
+        weekly_working_days: u.weekly_working_days ?? 5,
+      })
+    )
+  )
+
+  const userIds = users.map((u) => u.id)
+
+  const [balancesRes, grantsRes] = await Promise.all([
+    supabaseAdmin
+      .from('leave_balances')
+      .select('user_id, total_days, used_days')
+      .eq('company_id', payload.company_id)
+      .eq('fiscal_year', fiscalYear)
+      .in('user_id', userIds),
+    supabaseAdmin
+      .from('leave_grants')
+      .select('user_id, grant_date, granted_days, basis, note')
+      .eq('company_id', payload.company_id)
+      .in('user_id', userIds)
+      .order('grant_date', { ascending: false }),
   ])
 
-  const users = ((usersRes.data ?? []) as unknown as UserRow[]).filter((u) => u.role !== 'admin')
   const balanceMap = new Map(
     ((balancesRes.data ?? []) as unknown as BalanceRow[]).map((b) => [b.user_id, b])
   )
+  const grantsMap = new Map<string, GrantRow[]>()
+  for (const g of ((grantsRes.data ?? []) as unknown as GrantRow[])) {
+    if (!grantsMap.has(g.user_id)) grantsMap.set(g.user_id, [])
+    grantsMap.get(g.user_id)!.push(g)
+  }
 
-  const rows = users.map((u) => {
-    const bal = balanceMap.get(u.id)
-    const totalDays = bal?.total_days ?? calcGrantDays(u.hired_at)
-    const usedDays = bal?.used_days ?? 0
-    return { ...u, totalDays, usedDays, isAuto: !bal }
+  const rows: LeaveUserRow[] = users.map((u) => {
+    const bal        = balanceMap.get(u.id)
+    const weeklyDays = u.weekly_working_days ?? 5
+    const totalDays  = bal?.total_days ?? 0
+    const usedDays   = bal?.used_days  ?? 0
+    const next       = getNextGrantCycle(u.hired_at, weeklyDays)
+
+    return {
+      id:                  u.id,
+      employee_code:       u.employee_code,
+      name:                u.name,
+      hired_at:            u.hired_at?.slice(0, 10) ?? '',
+      tenureStr:           calcTenureStr(u.hired_at),
+      employment_type:     u.employment_type ?? 'full_time',
+      weekly_working_days: weeklyDays,
+      totalDays,
+      usedDays,
+      remaining:           totalDays - usedDays,
+      nextGrantDate:       next ? toDateStr(next.grantDate) : null,
+      nextGrantDays:       next?.grantedDays ?? null,
+      fiscalYear,
+      grants:              grantsMap.get(u.id) ?? [],
+    }
   })
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar userName={payload.name} />
 
-      <main className="flex-1 p-6 max-w-4xl">
+      <main className="flex-1 p-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-1">有給管理</h1>
-        <p className="text-sm text-gray-400 mb-6">{fiscalYear}年度</p>
+        <p className="text-sm text-gray-400 mb-6">{fiscalYear}年度 ／ 入社日基準個人サイクル</p>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">社員別有給残日数</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">社員番号</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">氏名</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">付与日数</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">消化日数</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">残日数</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((u) => {
-                  const remaining = u.totalDays - u.usedDays
-                  return (
-                  <tr key={u.id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-500">{u.employee_code}</td>
-                    <td className="px-4 py-3 text-sm font-medium">{u.name}</td>
-                    <td className="px-4 py-3 text-center text-sm">{u.totalDays}日</td>
-                    <td className="px-4 py-3 text-center text-sm text-orange-500">{u.usedDays}日</td>
-                    <td className={`px-4 py-3 text-center text-sm font-semibold ${
-                      remaining <= 0 ? 'text-red-600' : remaining <= 3 ? 'text-yellow-600' : 'text-green-600'
-                    }`}>{remaining}日</td>
-                    <td className="px-4 py-3 text-center">
-                      <LeaveGrantClient
-                        userId={u.id}
-                        fiscalYear={fiscalYear}
-                        totalDays={u.totalDays}
-                        isAuto={u.isAuto}
-                      />
-                    </td>
-                  </tr>
-                  )
-                })}
-                {rows.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                      社員が登録されていません
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+        <LeaveManagementTable rows={rows} fiscalYear={fiscalYear} />
 
         <div className="mt-4 text-xs text-gray-400 space-y-1">
-          <p>※ 「自動」と表示されている場合は雇用月数から算出した自動計算値です。「補填」で手動設定できます。</p>
-          <p>※ 消化日数は申請承認時に自動で増加します。</p>
+          <p>※ 行をクリックすると付与履歴が展開されます。</p>
+          <p>※ 「補填」で付与日数を手動設定できます。</p>
+          <p>※ 出勤率80%未満の場合は法定付与がスキップされます。</p>
         </div>
       </main>
     </div>

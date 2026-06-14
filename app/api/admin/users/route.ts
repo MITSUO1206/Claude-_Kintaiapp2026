@@ -52,6 +52,8 @@ export async function POST(request: NextRequest) {
       commuting_allowance?: number
       resident_tax?: number
       hired_at: string
+      employment_type?: string
+      weekly_working_days?: number
       password: string
     }
 
@@ -89,6 +91,8 @@ export async function POST(request: NextRequest) {
       commuting_allowance: body.commuting_allowance ?? 0,
       resident_tax: body.resident_tax ?? 0,
       hired_at: body.hired_at,
+      employment_type: body.employment_type ?? 'full_time',
+      weekly_working_days: body.weekly_working_days ?? 5,
       password_hash,
       force_password_change: true,
       is_active: true,

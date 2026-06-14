@@ -81,8 +81,7 @@ export function UnifiedDashboard({
         </div>
         <nav className="flex-1 px-2 py-3 space-y-1">
           {[
-            { href: '/dashboard', label: 'ダッシュボード' },
-            { href: '/requests', label: '申請' },
+            { href: '/dashboard', label: '勤怠' },
             { href: '/payslips', label: '給与明細' },
           ].map((item) => (
             <a

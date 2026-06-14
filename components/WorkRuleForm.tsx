@@ -18,8 +18,9 @@ export function WorkRuleForm({ initialRule }: { initialRule: WorkRule | null }) 
   const [workDays, setWorkDays]     = useState(String(initialRule?.work_days_per_month  ?? 20))
   const [closingDay, setClosingDay] = useState(String(initialRule?.closing_day          ?? 31))
   const [paymentDay, setPaymentDay] = useState(String(initialRule?.payment_day          ?? 25))
-  const [alertHours, setAlertHours] = useState(String(initialRule?.overtime_alert_hours ?? 36))
-  const [limitHours, setLimitHours] = useState(String(initialRule?.overtime_limit_hours ?? 45))
+  const [alertHours, setAlertHours]   = useState(String(initialRule?.overtime_alert_hours   ?? 36))
+  const [limitHours, setLimitHours]   = useState(String(initialRule?.overtime_limit_hours   ?? 45))
+  const [annualLimit, setAnnualLimit] = useState(String((initialRule as unknown as Record<string, unknown>)?.overtime_annual_limit ?? 360))
 
   const [holidayWeekdays, setHolidayWeekdays] = useState<string[]>(
     initialRule?.holiday_weekdays ?? ['sunday']
@@ -52,8 +53,9 @@ export function WorkRuleForm({ initialRule }: { initialRule: WorkRule | null }) 
           work_days_per_month:   parseInt(workDays),
           closing_day:           parseInt(closingDay),
           payment_day:           parseInt(paymentDay),
-          overtime_alert_hours:  parseInt(alertHours),
-          overtime_limit_hours:  parseInt(limitHours),
+          overtime_alert_hours:   parseInt(alertHours),
+          overtime_limit_hours:   parseInt(limitHours),
+          overtime_annual_limit:  parseInt(annualLimit),
           holiday_weekdays:      holidayWeekdays,
           payment_on_holiday:    paymentOnHoliday,
         }),
@@ -95,14 +97,19 @@ export function WorkRuleForm({ initialRule }: { initialRule: WorkRule | null }) 
               <Input type="number" min="1" max="31" value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} />
             </div>
             <div>
-              <Label>残業アラート時間（時間/月）</Label>
-              <Input type="number" value={alertHours} onChange={(e) => setAlertHours(e.target.value)} />
-              <p className="text-xs text-gray-400 mt-1">黄色警告のしきい値</p>
+              <Label>36協定 月上限（時間/月）</Label>
+              <Input type="number" value={limitHours} onChange={(e) => setLimitHours(e.target.value)} />
+              <p className="text-xs text-gray-400 mt-1">法定上限45h（特別条項なし）</p>
             </div>
             <div>
-              <Label>残業上限時間（時間/月）</Label>
-              <Input type="number" value={limitHours} onChange={(e) => setLimitHours(e.target.value)} />
-              <p className="text-xs text-gray-400 mt-1">赤色警告・メール通知のしきい値</p>
+              <Label>36協定 年上限（時間/年）</Label>
+              <Input type="number" value={annualLimit} onChange={(e) => setAnnualLimit(e.target.value)} />
+              <p className="text-xs text-gray-400 mt-1">法定上限360h（特別条項なし）</p>
+            </div>
+            <div>
+              <Label>警告しきい値（時間/月）</Label>
+              <Input type="number" value={alertHours} onChange={(e) => setAlertHours(e.target.value)} />
+              <p className="text-xs text-gray-400 mt-1">月上限の何時間前から黄色警告するか</p>
             </div>
           </div>
 

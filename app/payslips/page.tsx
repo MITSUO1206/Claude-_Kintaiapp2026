@@ -21,7 +21,7 @@ export default async function PayslipsPage() {
   const db = withCompany(payload.company_id)
 
   const { data } = await db
-    .select('payslips', 'id, year, month, gross_pay, net_pay, total_deduction, work_days, actual_hours, overtime_hours, is_finalized')
+    .select('payslips', 'id, year, month, gross_pay, net_pay, total_deduction, work_days, actual_hours, overtime_hours, is_finalized, status')
     .eq('user_id', payload.user_id)
     .order('year', { ascending: false })
     .limit(24)
@@ -57,7 +57,7 @@ export default async function PayslipsPage() {
                     <th className="px-3 py-2 text-center">出勤日数</th>
                     <th className="px-3 py-2 text-center">残業時間</th>
                     <th className="px-3 py-2 text-center">状態</th>
-                    <th className="px-3 py-2 text-center">PDF</th>
+                    <th className="px-3 py-2 text-center">明細</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -76,11 +76,10 @@ export default async function PayslipsPage() {
                       </td>
                       <td className="px-3 py-2 text-center">
                         <a
-                          href={`/api/admin/payslips/${p.id}/pdf`}
-                          target="_blank"
+                          href={`/payslips/${p.id}`}
                           className="text-xs text-blue-500 hover:underline"
                         >
-                          PDF
+                          明細を見る
                         </a>
                       </td>
                     </tr>

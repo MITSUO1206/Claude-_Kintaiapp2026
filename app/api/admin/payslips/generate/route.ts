@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/requireAuth'
 import { withCompany } from '@/lib/db/withCompany'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { calculatePayslip } from '@/lib/payslip/calculate'
 import { writeAuditLog } from '@/lib/audit/log'
 import type { ApiError } from '@/lib/types'
+
+type UserRow       = { id: string; salary_type: string; base_salary: number; commuting_allowance: number; resident_tax: number }
+type SalaryConfig  = { user_id: string; salary_type: string; base_salary: number }
+type WorkRule      = { work_hours_per_day: number; work_days_per_month: number }
+type AttRow        = { user_id: string; actual_minutes: number | null; overtime_minutes: number | null; night_minutes: number; is_holiday_work: boolean; status: string }
+type FieldValueRow = { user_id: string; label: string; category: string; amount: number }
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,94 +36,145 @@ export async function POST(request: NextRequest) {
       targetUserIds = ((users ?? []) as unknown as { id: string }[]).map((u) => u.id)
     }
 
-    const { data: usersData } = await db
-      .select('users', 'id, salary_type, base_salary, commuting_allowance, resident_tax')
-      .in('id', targetUserIds)
+    // 必要なデータを並列取得
+    const [usersRes, workRuleRes, attendancesRes, fieldValuesRes, salaryConfigsRes] = await Promise.all([
+      db.select('users', 'id, salary_type, base_salary, commuting_allowance, resident_tax')
+        .in('id', targetUserIds),
+      db.select('work_rules', 'work_hours_per_day, work_days_per_month')
+        .limit(1)
+        .single(),
+      db.select('attendance_records', 'user_id, actual_minutes, overtime_minutes, night_minutes, is_holiday_work, status')
+        .in('user_id', targetUserIds)
+        .gte('work_date', fromDate)
+        .lte('work_date', toDate),
+      // 月別給与項目（当月分のみ）
+      supabaseAdmin
+        .from('monthly_salary_values')
+        .select('user_id, label, category, amount')
+        .eq('company_id', payload.company_id)
+        .eq('year', year)
+        .eq('month', month)
+        .in('user_id', targetUserIds),
+      // 月別基本給設定（当月分。なければ users テーブルにフォールバック）
+      supabaseAdmin
+        .from('monthly_salary_config')
+        .select('user_id, salary_type, base_salary')
+        .eq('company_id', payload.company_id)
+        .eq('year', year)
+        .eq('month', month)
+        .in('user_id', targetUserIds),
+    ])
 
-    const { data: workRuleData } = await db
-      .select('work_rules', 'work_hours_per_day, work_days_per_month')
-      .limit(1)
-      .single()
+    const userMap    = new Map(((usersRes.data ?? []) as unknown as UserRow[]).map((u) => [u.id, u]))
+    const workRule   = (workRuleRes.data as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20 }
+    const attRows    = (attendancesRes.data ?? []) as unknown as AttRow[]
+    const fieldValues = (fieldValuesRes.data ?? []) as unknown as FieldValueRow[]
+    const salaryConfigMap = new Map(((salaryConfigsRes.data ?? []) as unknown as SalaryConfig[]).map((c) => [c.user_id, c]))
 
-    type UserRow = { id: string; salary_type: string; base_salary: number; commuting_allowance: number; resident_tax: number }
-    type WorkRule = { work_hours_per_day: number; work_days_per_month: number }
-
-    const userMap = new Map(((usersData ?? []) as unknown as UserRow[]).map((u) => [u.id, u]))
-    const workRule = (workRuleData as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20 }
-
-    const { data: attendances } = await db
-      .select('attendance_records', 'user_id, actual_minutes, overtime_minutes, night_minutes, is_holiday_work, status')
-      .in('user_id', targetUserIds)
-      .gte('work_date', fromDate)
-      .lte('work_date', toDate)
-
-    type AttRow = { user_id: string; actual_minutes: number | null; overtime_minutes: number | null; night_minutes: number; is_holiday_work: boolean; status: string }
-    const attRows = (attendances ?? []) as unknown as AttRow[]
-
+    // 勤怠をユーザーごとに整理
     const attByUser = new Map<string, AttRow[]>()
     for (const r of attRows) {
       if (!attByUser.has(r.user_id)) attByUser.set(r.user_id, [])
       attByUser.get(r.user_id)!.push(r)
     }
 
-    const upserts: Record<string, unknown>[] = []
+    // 社員給与項目をユーザーごとに整理
+    const fieldValuesByUser = new Map<string, FieldValueRow[]>()
+    for (const v of fieldValues) {
+      if (!fieldValuesByUser.has(v.user_id)) fieldValuesByUser.set(v.user_id, [])
+      fieldValuesByUser.get(v.user_id)!.push(v)
+    }
+
+    const upserts: Record<string, unknown>[]                         = []
     const itemsByUser = new Map<string, Array<Record<string, unknown>>>()
 
     for (const uid of targetUserIds) {
       const user = userMap.get(uid)
       if (!user) continue
 
-      const rows = attByUser.get(uid) ?? []
+      // 勤怠集計
+      const rows           = attByUser.get(uid) ?? []
       const actualWorkDays  = rows.filter((r) => r.status === 'present').length
       const absentDays      = rows.filter((r) => r.status === 'absent').length
       const paidLeaveDays   = rows.filter((r) => r.status === 'leave_paid' || r.status === 'leave_special').length
       const holidayWorkDays = rows.filter((r) => r.is_holiday_work).length
-
-      const totalActualMinutes   = rows.reduce((s, r) => s + (r.actual_minutes ?? 0), 0)
+      const totalActualMinutes   = rows.reduce((s, r) => s + (r.actual_minutes   ?? 0), 0)
       const totalOvertimeMinutes = rows.reduce((s, r) => s + (r.overtime_minutes ?? 0), 0)
       const totalNightMinutes    = rows.reduce((s, r) => s + r.night_minutes, 0)
 
+      // 月別給与項目（当月分のみ）
+      const userFieldValues = fieldValuesByUser.get(uid) ?? []
+      const extraAllowance  = userFieldValues
+        .filter((v) => v.category === 'allowance')
+        .reduce((s, v) => s + Number(v.amount), 0)
+      const extraDeduction  = userFieldValues
+        .filter((v) => v.category === 'deduction')
+        .reduce((s, v) => s + Number(v.amount), 0)
+
+      // 給与計算（月別設定を優先、なければ users テーブル）
+      const salaryConfig = salaryConfigMap.get(uid)
       const result = calculatePayslip({
-        salary_type: (user.salary_type as 'monthly' | 'hourly') ?? 'monthly',
-        base_salary: user.base_salary ?? 0,
-        work_hours_per_day: workRule.work_hours_per_day,
-        work_days_per_month: workRule.work_days_per_month,
-        actual_minutes: totalActualMinutes,
-        overtime_minutes: totalOvertimeMinutes,
-        night_minutes: totalNightMinutes,
-        holiday_work_days: holidayWorkDays,
-        work_days: actualWorkDays,
-        absent_days: absentDays,
-        paid_leave_days: paidLeaveDays,
-        commuting_allowance: user.commuting_allowance ?? 0,
-        other_allowance: 0,
-        resident_tax: user.resident_tax ?? 0,
-        other_deduction: 0,
+        salary_type:         ((salaryConfig?.salary_type ?? user.salary_type) as 'monthly' | 'hourly'),
+        base_salary:          salaryConfig?.base_salary ?? user.base_salary ?? 0,
+        work_hours_per_day:   workRule.work_hours_per_day,
+        work_days_per_month:  workRule.work_days_per_month,
+        actual_minutes:       totalActualMinutes,
+        overtime_minutes:     totalOvertimeMinutes,
+        night_minutes:        totalNightMinutes,
+        holiday_work_days:    holidayWorkDays,
+        work_days:            actualWorkDays,
+        absent_days:          absentDays,
+        paid_leave_days:      paidLeaveDays,
+        commuting_allowance:  user.commuting_allowance ?? 0,
+        other_allowance:      extraAllowance,   // ← カスタム手当を反映
+        resident_tax:         user.resident_tax ?? 0,
+        other_deduction:      extraDeduction,   // ← カスタム控除を反映
       })
 
       upserts.push({
-        company_id: payload.company_id,
-        user_id: uid,
+        company_id:   payload.company_id,
+        user_id:      uid,
         year,
         month,
-        status: 'draft',
+        status:       'draft',
         ...result,
-        updated_at: new Date().toISOString(),
+        updated_at:   new Date().toISOString(),
       })
 
-      // payslip_items 用データ（後でpayslip_idと紐付け）
+      // 明細行を構築（固定項目 + カスタム項目）
       const items: Array<Record<string, unknown>> = [
-        { category: 'income',    label: '基本給',     amount: Math.round(result.base_salary), sort_order: 1, is_auto_calc: true },
-        { category: 'income',    label: '残業手当',   amount: Math.round(result.overtime_pay), sort_order: 2, is_auto_calc: true },
-        { category: 'income',    label: '深夜手当',   amount: Math.round(result.night_pay), sort_order: 3, is_auto_calc: true },
-        { category: 'income',    label: '休日手当',   amount: Math.round(result.holiday_pay), sort_order: 4, is_auto_calc: true },
-        { category: 'income',    label: '通勤手当',   amount: Math.round(result.commuting_allowance), sort_order: 5, is_auto_calc: false },
-        { category: 'deduction', label: '健康保険',   amount: Math.round(result.health_insurance), sort_order: 10, is_auto_calc: true },
-        { category: 'deduction', label: '厚生年金',   amount: Math.round(result.pension), sort_order: 11, is_auto_calc: true },
-        { category: 'deduction', label: '雇用保険',   amount: Math.round(result.employment_insurance), sort_order: 12, is_auto_calc: true },
-        { category: 'deduction', label: '所得税',     amount: Math.round(result.income_tax), sort_order: 13, is_auto_calc: true },
-        { category: 'deduction', label: '住民税',     amount: Math.round(result.resident_tax), sort_order: 14, is_auto_calc: false },
+        { category: 'income',    label: '基本給',   amount: Math.round(result.base_salary),          sort_order: 1,  is_auto_calc: true },
+        { category: 'income',    label: '残業手当', amount: Math.round(result.overtime_pay),         sort_order: 2,  is_auto_calc: true },
+        { category: 'income',    label: '深夜手当', amount: Math.round(result.night_pay),            sort_order: 3,  is_auto_calc: true },
+        { category: 'income',    label: '休日手当', amount: Math.round(result.holiday_pay),          sort_order: 4,  is_auto_calc: true },
+        { category: 'income',    label: '通勤手当', amount: Math.round(user.commuting_allowance ?? 0), sort_order: 5, is_auto_calc: false },
+        // カスタム手当（社員給与項目DB より）
+        ...userFieldValues
+          .filter((v) => v.category === 'allowance' && Number(v.amount) !== 0)
+          .map((v, i) => ({
+            category:     'income',
+            label:         v.label,
+            amount:        Math.round(Number(v.amount)),
+            sort_order:    6 + i,
+            is_auto_calc:  false,
+          })),
+        { category: 'deduction', label: '健康保険', amount: Math.round(result.health_insurance),     sort_order: 10, is_auto_calc: true },
+        { category: 'deduction', label: '厚生年金', amount: Math.round(result.pension),              sort_order: 11, is_auto_calc: true },
+        { category: 'deduction', label: '雇用保険', amount: Math.round(result.employment_insurance), sort_order: 12, is_auto_calc: true },
+        { category: 'deduction', label: '所得税',   amount: Math.round(result.income_tax),           sort_order: 13, is_auto_calc: true },
+        { category: 'deduction', label: '住民税',   amount: Math.round(result.resident_tax),         sort_order: 14, is_auto_calc: false },
+        // カスタム控除（社員給与項目DB より）
+        ...userFieldValues
+          .filter((v) => v.category === 'deduction' && Number(v.amount) !== 0)
+          .map((v, i) => ({
+            category:     'deduction',
+            label:         v.label,
+            amount:        Math.round(Number(v.amount)),
+            sort_order:    15 + i,
+            is_auto_calc:  false,
+          })),
       ]
+
       itemsByUser.set(uid, items)
     }
 
@@ -130,7 +188,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<ApiError>({ error: '給与明細の生成に失敗しました', code: error.code }, { status: 500 })
     }
 
-    // payslip_items を upsert
     type InsertedRow = { id: string; user_id: string }
     const insertedRows = (inserted ?? []) as unknown as InsertedRow[]
 
@@ -138,29 +195,28 @@ export async function POST(request: NextRequest) {
       const items = itemsByUser.get(row.user_id)
       if (!items) continue
 
-      // 既存の自動計算 items を削除して再作成
+      // 全明細行を削除して再作成（生成のたびに DB から最新値を反映）
       await db.raw.from('payslip_items')
         .delete()
         .eq('company_id', payload.company_id)
         .eq('payslip_id', row.id)
-        .eq('is_auto_calc', true)
 
       const itemRows = items.map((item) => ({
         ...item,
         company_id: payload.company_id,
         payslip_id: row.id,
-        is_active: true,
+        is_active:  true,
       }))
       await db.raw.from('payslip_items').insert(itemRows)
     }
 
     await writeAuditLog({
-      company_id: payload.company_id,
-      user_id: payload.user_id,
-      action: 'payslip_generate',
-      table_name: 'payslips',
-      new_values: { year, month, count: upserts.length },
-      ip_address: request.headers.get('x-forwarded-for') ?? 'unknown',
+      company_id:  payload.company_id,
+      user_id:     payload.user_id,
+      action:      'payslip_generate',
+      table_name:  'payslips',
+      new_values:  { year, month, count: upserts.length },
+      ip_address:  request.headers.get('x-forwarded-for') ?? 'unknown',
     })
 
     return NextResponse.json({ success: true, generated: upserts.length })

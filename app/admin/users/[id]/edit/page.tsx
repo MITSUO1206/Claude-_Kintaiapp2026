@@ -20,7 +20,7 @@ export default async function EditUserPage({ params }: { params: Params }) {
   const db = withCompany(payload.company_id)
 
   const { data: user } = await db
-    .select('users', 'id, employee_code, name, email, role, salary_type, base_salary, commuting_allowance, resident_tax, hired_at')
+    .select('users', 'id, employee_code, name, email, role, salary_type, base_salary, commuting_allowance, resident_tax, hired_at, employment_type, weekly_working_days')
     .eq('id', id)
     .single()
 
@@ -28,6 +28,7 @@ export default async function EditUserPage({ params }: { params: Params }) {
     id: string; employee_code: string; name: string; email: string
     role: string; salary_type: string; base_salary: number
     commuting_allowance: number; resident_tax: number; hired_at: string
+    employment_type: string; weekly_working_days: number
   }
   const u = user as unknown as UserRow | null
   if (!u) redirect('/admin/users')
@@ -55,6 +56,8 @@ export default async function EditUserPage({ params }: { params: Params }) {
                 commuting_allowance: String(u.commuting_allowance ?? 0),
                 resident_tax: String(u.resident_tax ?? 0),
                 hired_at: u.hired_at?.slice(0, 10) ?? '',
+                employment_type: u.employment_type ?? 'full_time',
+                weekly_working_days: String(u.weekly_working_days ?? 5),
               }}
             />
           </CardContent>

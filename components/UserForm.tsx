@@ -13,6 +13,8 @@ interface UserFormData {
   commuting_allowance: string
   resident_tax: string
   hired_at: string
+  employment_type: string
+  weekly_working_days: string
   password: string
 }
 
@@ -36,6 +38,8 @@ export function UserForm({ mode, userId, initial }: Props) {
     commuting_allowance: initial?.commuting_allowance ?? '0',
     resident_tax: initial?.resident_tax ?? '0',
     hired_at: initial?.hired_at ?? '',
+    employment_type: initial?.employment_type ?? 'full_time',
+    weekly_working_days: initial?.weekly_working_days ?? '5',
     password: '',
   })
   const [loading, setLoading] = useState(false)
@@ -60,6 +64,8 @@ export function UserForm({ mode, userId, initial }: Props) {
         commuting_allowance: parseFloat(form.commuting_allowance) || 0,
         resident_tax: parseFloat(form.resident_tax) || 0,
         hired_at: form.hired_at,
+        employment_type: form.employment_type,
+        weekly_working_days: parseInt(form.weekly_working_days) || 5,
       }
 
       if (mode === 'create') {
@@ -154,6 +160,31 @@ export function UserForm({ mode, userId, initial }: Props) {
         <label className="block text-sm font-medium text-gray-700 mb-1">入社日 *</label>
         <input type="date" value={form.hired_at} onChange={(e) => set('hired_at', e.target.value)} required
           className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">雇用形態</label>
+          <select value={form.employment_type} onChange={(e) => set('employment_type', e.target.value)}
+            className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="full_time">正社員</option>
+            <option value="part_time">パート</option>
+            <option value="contract">契約社員</option>
+            <option value="dispatch">派遣</option>
+            <option value="other">その他</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">週所定労働日数</label>
+          <select value={form.weekly_working_days} onChange={(e) => set('weekly_working_days', e.target.value)}
+            className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="5">5日（週5日）</option>
+            <option value="4">4日（週4日）</option>
+            <option value="3">3日（週3日）</option>
+            <option value="2">2日（週2日）</option>
+            <option value="1">1日（週1日）</option>
+          </select>
+        </div>
       </div>
 
       <div>

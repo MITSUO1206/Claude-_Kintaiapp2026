@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { verifyJWT } from '@/lib/auth/jwt'
 import { withCompany } from '@/lib/db/withCompany'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AdminPayslipControls } from '@/components/AdminPayslipControls'
 import type { Payslip } from '@/lib/types'
 import { AdminSidebar } from '@/components/AdminSidebar'
 
@@ -70,8 +69,6 @@ export default async function AdminPayslipsPage({ searchParams }: { searchParams
             <a href={`/admin/payslips?year=${nextYear}&month=${nextMonth}`} className="text-sm text-blue-500 hover:underline">翌月 ›</a>
           </div>
         </div>
-
-        <AdminPayslipControls year={year} month={month} />
 
         {/* 絞り込みフォーム */}
         <form method="GET" className="flex gap-2 flex-wrap bg-white p-3 rounded-lg border text-sm">
@@ -163,7 +160,7 @@ export default async function AdminPayslipsPage({ searchParams }: { searchParams
                         </td>
                         <td className="px-3 py-2 text-center">
                           <div className="flex gap-2 justify-center">
-                            <a href={`/admin/payslips/${p.id}/edit`} className="text-xs text-blue-500 hover:underline">編集</a>
+                            <a href={`/admin/payslips/${p.id}/edit`} className="text-xs text-blue-500 hover:underline">明細編集</a>
                             <a href={`/api/admin/payslips/${p.id}/pdf`} target="_blank" className="text-xs text-gray-500 hover:underline">PDF</a>
                           </div>
                         </td>
