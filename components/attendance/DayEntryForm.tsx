@@ -107,33 +107,17 @@ export function DayEntryForm({ selectedDate, record, onSaved }: DayEntryFormProp
       <div className="flex-1 space-y-4">
         {/* 区分 */}
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-2">区分</p>
-          <div className="grid grid-cols-2 gap-1.5">
+          <label className="text-xs font-medium text-gray-500 block mb-1">区分</label>
+          <select
+            value={shiftType}
+            disabled={isLocked}
+            onChange={(e) => setShiftType(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-400"
+          >
             {shiftTypes.map((shift) => (
-              <label
-                key={shift}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors ${
-                  shiftType === shift
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
-                } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="shift_type"
-                  value={shift}
-                  checked={shiftType === shift}
-                  disabled={isLocked}
-                  onChange={() => setShiftType(shift)}
-                  className="sr-only"
-                />
-                <span className={`w-3 h-3 rounded-full border-2 flex-shrink-0 ${
-                  shiftType === shift ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-                }`} />
-                {shift}
-              </label>
+              <option key={shift} value={shift}>{shift}</option>
             ))}
-          </div>
+          </select>
         </div>
 
         {/* 就業場所 */}
