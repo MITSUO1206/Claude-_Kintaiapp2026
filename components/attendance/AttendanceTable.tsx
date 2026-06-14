@@ -173,6 +173,8 @@ export function AttendanceTable({
               const isEditing = editingDate === dateStr
               const isLocked = (rec?.is_locked ?? false) && !isAdmin
               const isWeekend = isSat || isSun
+              const isTimeOff = rec?.shift_type === '休日' || rec?.shift_type === '年休'
+              const editIsTimeOff = editState.shiftType === '休日' || editState.shiftType === '年休'
 
               const rowBg = isEditing
                 ? 'bg-blue-50'
@@ -238,7 +240,7 @@ export function AttendanceTable({
 
                   {/* 出勤 */}
                   <td className="px-3 py-1.5 text-center">
-                    {isEditing ? (
+                    {isEditing && !editIsTimeOff ? (
                       <input
                         type="time"
                         value={editState.clockIn}
@@ -246,13 +248,15 @@ export function AttendanceTable({
                         className="border border-blue-300 rounded px-1 py-0.5 text-xs w-20"
                       />
                     ) : (
-                      <span className="text-sm text-gray-700">{isoToHHMM(rec?.clock_in) || '—'}</span>
+                      <span className="text-sm text-gray-700">
+                        {isEditing || isTimeOff ? '—' : (isoToHHMM(rec?.clock_in) || '—')}
+                      </span>
                     )}
                   </td>
 
                   {/* 退勤 */}
                   <td className="px-3 py-1.5 text-center">
-                    {isEditing ? (
+                    {isEditing && !editIsTimeOff ? (
                       <input
                         type="time"
                         value={editState.clockOut}
@@ -260,13 +264,15 @@ export function AttendanceTable({
                         className="border border-blue-300 rounded px-1 py-0.5 text-xs w-20"
                       />
                     ) : (
-                      <span className="text-sm text-gray-700">{isoToHHMM(rec?.clock_out) || '—'}</span>
+                      <span className="text-sm text-gray-700">
+                        {isEditing || isTimeOff ? '—' : (isoToHHMM(rec?.clock_out) || '—')}
+                      </span>
                     )}
                   </td>
 
                   {/* 休憩 */}
                   <td className="px-3 py-1.5 text-center">
-                    {isEditing ? (
+                    {isEditing && !editIsTimeOff ? (
                       <input
                         type="number"
                         min={0}
@@ -280,14 +286,16 @@ export function AttendanceTable({
                       />
                     ) : (
                       <span className="text-xs text-gray-500">
-                        {rec?.break_minutes != null ? `${rec.break_minutes}分` : '—'}
+                        {!isTimeOff && rec?.break_minutes != null ? `${rec.break_minutes}分` : '—'}
                       </span>
                     )}
                   </td>
 
                   {/* 実働 */}
                   <td className="px-3 py-1.5 text-center">
-                    <span className="text-xs text-gray-700">{minutesToHHMM(rec?.actual_minutes)}</span>
+                    <span className="text-xs text-gray-700">
+                      {isTimeOff ? '—' : minutesToHHMM(rec?.actual_minutes)}
+                    </span>
                   </td>
 
                   {/* 操作 */}
