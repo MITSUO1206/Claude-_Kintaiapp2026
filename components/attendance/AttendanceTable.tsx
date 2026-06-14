@@ -311,7 +311,7 @@ export function AttendanceTable({
                           取消
                         </button>
                       </div>
-                    ) : !isWeekend && !isLocked ? (
+                    ) : !isLocked ? (
                       <button
                         onClick={() => startEdit(dateStr)}
                         className="px-2 py-1 border border-gray-200 text-gray-400 text-xs rounded hover:border-blue-300 hover:text-blue-600 transition-colors"
