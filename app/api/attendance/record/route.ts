@@ -4,16 +4,49 @@ import { withCompany } from '@/lib/db/withCompany'
 import { writeAuditLog } from '@/lib/audit/log'
 import type { AttendanceRecord, ApiError } from '@/lib/types'
 
-// "HH:MM" + "YYYY-MM-DD" → JST の ISO 文字列
 function toJSTTimestamp(date: string, time: string): string {
   return `${date}T${time}:00+09:00`
 }
 
-// HH:MM 形式チェック（値域も検証）
 function isValidTime(t: string): boolean {
   if (!/^\d{2}:\d{2}$/.test(t)) return false
   const [h, m] = t.split(':').map(Number)
   return h >= 0 && h <= 23 && m >= 0 && m <= 59
+}
+
+type LBRow = { id: string; total_days: number; used_days: number }
+type ExRow = { id: string; is_locked: boolean; status: string | null }
+
+async function adjustLeaveBalance(
+  db: ReturnType<typeof withCompany>,
+  userId: string,
+  fiscalYear: number,
+  oldStatus: string | null,
+  newStatus: string
+): Promise<string> {
+  const wasLeave = oldStatus === 'leave_paid'
+  const isLeave  = newStatus === 'leave_paid'
+  if (wasLeave === isLeave) return newStatus
+
+  const { data: lbData } = await db
+    .select('leave_balances', 'id, total_days, used_days')
+    .eq('user_id', userId)
+    .eq('fiscal_year', fiscalYear)
+    .single()
+  const lb = lbData as unknown as LBRow | null
+
+  if (isLeave && !wasLeave) {
+    const remaining = (lb?.total_days ?? 0) - (lb?.used_days ?? 0)
+    if (remaining <= 0) return 'absent'
+    if (lb) await db.update('leave_balances', { used_days: lb.used_days + 1 }).eq('id', lb.id)
+    return 'leave_paid'
+  }
+
+  // wasLeave && !isLeave: 年休 → 他区分 なら消化日数を戻す
+  if (lb && lb.used_days > 0) {
+    await db.update('leave_balances', { used_days: lb.used_days - 1 }).eq('id', lb.id)
+  }
+  return newStatus
 }
 
 export async function PUT(request: NextRequest) {
@@ -32,10 +65,9 @@ export async function PUT(request: NextRequest) {
       shift_type: string | null
     }
 
-    // shift_type から status を決定
     const VALID_SHIFTS = ['0800-1645', '0900-1745', '休日', '年休'] as const
     const resolvedShift = (shift_type && (VALID_SHIFTS as readonly string[]).includes(shift_type)) ? shift_type : null
-    const resolvedStatus =
+    const baseStatus =
       resolvedShift === '年休' ? 'leave_paid' :
       resolvedShift === '休日' ? 'absent' :
       'present'
@@ -58,7 +90,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json<ApiError>({ error: '就業場所の値が不正です' }, { status: 400 })
     }
 
-    // actual_minutes 計算
     let actualMinutes: number | null = null
     let overtimeMinutes: number | null = null
 
@@ -69,27 +100,26 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json<ApiError>({ error: '退勤時刻は出勤時刻より後にしてください' }, { status: 400 })
       }
       actualMinutes = Math.max(0, Math.floor((outMs - inMs) / 60000) - break_minutes)
-
-      // work_rules から所定労働時間を取得して残業計算
       const { data: wr } = await db.select('work_rules', 'work_hours_per_day').single()
       type WR = { work_hours_per_day: number }
       const scheduledMinutes = Math.round(((wr as unknown as WR | null)?.work_hours_per_day ?? 8) * 60)
       overtimeMinutes = Math.max(0, actualMinutes - scheduledMinutes)
     }
 
-    // 既存レコード確認
     const { data: existing } = await db
-      .select('attendance_records', 'id, is_locked')
+      .select('attendance_records', 'id, is_locked, status')
       .eq('user_id', userId)
       .eq('work_date', work_date)
       .single()
 
-    type ExRow = { id: string; is_locked: boolean }
     const ex = existing as unknown as ExRow | null
 
     if (ex?.is_locked) {
       return NextResponse.json<ApiError>({ error: '締め済みのため編集できません' }, { status: 403 })
     }
+
+    const fiscalYear = parseInt(work_date.substring(0, 4))
+    const resolvedStatus = await adjustLeaveBalance(db, userId, fiscalYear, ex?.status ?? null, baseStatus)
 
     const clockInISO  = clock_in  ? toJSTTimestamp(work_date, clock_in)  : null
     const clockOutISO = clock_out ? toJSTTimestamp(work_date, clock_out) : null
@@ -145,7 +175,7 @@ export async function PUT(request: NextRequest) {
       action:     'attendance_record_save',
       table_name: 'attendance_records',
       record_id:  record.id,
-      new_values: { work_date, clock_in, clock_out, break_minutes, work_location },
+      new_values: { work_date, clock_in, clock_out, break_minutes, work_location, shift_type },
       ip_address: request.headers.get('x-forwarded-for') ?? 'unknown',
     })
 

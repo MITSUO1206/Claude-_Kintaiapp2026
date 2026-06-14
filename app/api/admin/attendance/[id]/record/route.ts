@@ -14,6 +14,41 @@ function isValidTime(t: string): boolean {
   return h >= 0 && h <= 23 && m >= 0 && m <= 59
 }
 
+type LBRow = { id: string; total_days: number; used_days: number }
+type ExRow = { id: string; is_locked: boolean; status: string | null }
+
+async function adjustLeaveBalance(
+  db: ReturnType<typeof withCompany>,
+  userId: string,
+  fiscalYear: number,
+  oldStatus: string | null,
+  newStatus: string
+): Promise<string> {
+  const wasLeave = oldStatus === 'leave_paid'
+  const isLeave  = newStatus === 'leave_paid'
+  if (wasLeave === isLeave) return newStatus
+
+  const { data: lbData } = await db
+    .select('leave_balances', 'id, total_days, used_days')
+    .eq('user_id', userId)
+    .eq('fiscal_year', fiscalYear)
+    .single()
+  const lb = lbData as unknown as LBRow | null
+
+  if (isLeave && !wasLeave) {
+    const remaining = (lb?.total_days ?? 0) - (lb?.used_days ?? 0)
+    if (remaining <= 0) return 'absent'
+    if (lb) await db.update('leave_balances', { used_days: lb.used_days + 1 }).eq('id', lb.id)
+    return 'leave_paid'
+  }
+
+  // wasLeave && !isLeave: 年休 → 他区分 なら消化日数を戻す
+  if (lb && lb.used_days > 0) {
+    await db.update('leave_balances', { used_days: lb.used_days - 1 }).eq('id', lb.id)
+  }
+  return newStatus
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -31,9 +66,10 @@ export async function PUT(
       clock_out: string | null
       break_minutes: number
       work_location: string | null
+      shift_type: string | null
     }
 
-    const { work_date, clock_in, clock_out, break_minutes, work_location } = body
+    const { work_date, clock_in, clock_out, break_minutes, work_location, shift_type } = body
 
     if (!work_date || !/^\d{4}-\d{2}-\d{2}$/.test(work_date)) {
       return NextResponse.json<ApiError>({ error: '日付が不正です' }, { status: 400 })
@@ -47,6 +83,13 @@ export async function PUT(
     if (typeof break_minutes !== 'number' || break_minutes < 0) {
       return NextResponse.json<ApiError>({ error: '休憩時間が不正です' }, { status: 400 })
     }
+
+    const VALID_SHIFTS = ['0800-1645', '0900-1745', '休日', '年休'] as const
+    const resolvedShift = (shift_type && (VALID_SHIFTS as readonly string[]).includes(shift_type)) ? shift_type : null
+    const baseStatus =
+      resolvedShift === '年休' ? 'leave_paid' :
+      resolvedShift === '休日' ? 'absent' :
+      'present'
 
     const db = withCompany(payload.company_id)
 
@@ -72,13 +115,15 @@ export async function PUT(
     }
 
     const { data: existing } = await db
-      .select('attendance_records', 'id, is_locked')
+      .select('attendance_records', 'id, is_locked, status')
       .eq('user_id', userId)
       .eq('work_date', work_date)
       .single()
 
-    type ExRow = { id: string; is_locked: boolean }
     const ex = existing as unknown as ExRow | null
+
+    const fiscalYear = parseInt(work_date.substring(0, 4))
+    const resolvedStatus = await adjustLeaveBalance(db, userId, fiscalYear, ex?.status ?? null, baseStatus)
 
     const clockInISO  = clock_in  ? toJSTTimestamp(work_date, clock_in)  : null
     const clockOutISO = clock_out ? toJSTTimestamp(work_date, clock_out) : null
@@ -88,13 +133,14 @@ export async function PUT(
     if (ex) {
       const { data, error } = await db
         .update('attendance_records', {
-          clock_in: clockInISO,
-          clock_out: clockOutISO,
+          clock_in:         clockInISO,
+          clock_out:        clockOutISO,
           break_minutes,
-          actual_minutes: actualMinutes,
+          actual_minutes:   actualMinutes,
           overtime_minutes: overtimeMinutes,
-          work_location: work_location ?? null,
-          status: 'present',
+          work_location:    work_location ?? null,
+          shift_type:       resolvedShift,
+          status:           resolvedStatus,
         })
         .eq('id', ex.id)
         .select()
@@ -105,19 +151,20 @@ export async function PUT(
       record = data as unknown as AttendanceRecord
     } else {
       const { data, error } = await db.insert('attendance_records', {
-        user_id: userId,
+        user_id:          userId,
         work_date,
-        clock_in: clockInISO,
-        clock_out: clockOutISO,
+        clock_in:         clockInISO,
+        clock_out:        clockOutISO,
         break_minutes,
-        actual_minutes: actualMinutes,
+        actual_minutes:   actualMinutes,
         overtime_minutes: overtimeMinutes,
-        night_minutes: 0,
-        holiday_minutes: 0,
-        is_holiday_work: false,
-        is_locked: false,
-        work_location: work_location ?? null,
-        status: 'present',
+        night_minutes:    0,
+        holiday_minutes:  0,
+        is_holiday_work:  false,
+        is_locked:        false,
+        work_location:    work_location ?? null,
+        shift_type:       resolvedShift,
+        status:           resolvedStatus,
       })
       if (error) {
         return NextResponse.json<ApiError>({ error: '保存に失敗しました' }, { status: 500 })
@@ -128,11 +175,11 @@ export async function PUT(
 
     void writeAuditLog({
       company_id: payload.company_id,
-      user_id: payload.user_id,
-      action: 'admin_attendance_record_save',
+      user_id:    payload.user_id,
+      action:     'admin_attendance_record_save',
       table_name: 'attendance_records',
-      record_id: record.id,
-      new_values: { target_user_id: userId, work_date, clock_in, clock_out, break_minutes },
+      record_id:  record.id,
+      new_values: { target_user_id: userId, work_date, clock_in, clock_out, break_minutes, shift_type },
       ip_address: request.headers.get('x-forwarded-for') ?? 'unknown',
     })
 
