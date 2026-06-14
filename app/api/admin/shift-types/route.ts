@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
       .select('shift_types', 'id, label, sort_order, is_active')
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
-    return NextResponse.json({ shift_types: (data ?? []) as ShiftRow[] })
+    return NextResponse.json({ shift_types: (data ?? []) as unknown as ShiftRow[] })
   } catch {
     return NextResponse.json<ApiError>({ error: 'Unauthorized' }, { status: 401 })
   }
