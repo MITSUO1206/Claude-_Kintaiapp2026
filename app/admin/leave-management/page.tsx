@@ -71,30 +71,37 @@ export default async function LeaveManagementPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="px-4 py-2 text-left">社員番号</th>
-                  <th className="px-4 py-2 text-left">氏名</th>
-                  <th className="px-4 py-2 text-right">付与日数</th>
-                  <th className="px-4 py-2 text-right">消化日数</th>
-                  <th className="px-4 py-2 text-right">残日数</th>
-                  <th className="px-4 py-2 text-right">操作</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">社員番号</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">氏名</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">付与日数</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">消化日数</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">残日数</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">操作</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((u) => (
+                {rows.map((u) => {
+                  const remaining = u.totalDays - u.usedDays
+                  return (
                   <tr key={u.id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-500">{u.employee_code}</td>
-                    <td className="px-4 py-3 font-medium">{u.name}</td>
-                    <td colSpan={4} className="px-4 py-3">
+                    <td className="px-4 py-3 text-sm text-gray-500">{u.employee_code}</td>
+                    <td className="px-4 py-3 text-sm font-medium">{u.name}</td>
+                    <td className="px-4 py-3 text-center text-sm">{u.totalDays}日</td>
+                    <td className="px-4 py-3 text-center text-sm text-orange-500">{u.usedDays}日</td>
+                    <td className={`px-4 py-3 text-center text-sm font-semibold ${
+                      remaining <= 0 ? 'text-red-600' : remaining <= 3 ? 'text-yellow-600' : 'text-green-600'
+                    }`}>{remaining}日</td>
+                    <td className="px-4 py-3 text-center">
                       <LeaveGrantClient
                         userId={u.id}
                         fiscalYear={fiscalYear}
                         totalDays={u.totalDays}
-                        usedDays={u.usedDays}
                         isAuto={u.isAuto}
                       />
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
