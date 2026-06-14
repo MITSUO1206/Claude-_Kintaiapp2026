@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
 
-    const labels = (data ?? []) as { id: string; label: string; sort_order: number }[]
+    const labels = (data ?? []) as unknown as { id: string; label: string; sort_order: number }[]
     return NextResponse.json({
       shift_types: labels.length > 0 ? labels.map((r) => r.label) : DEFAULTS,
     })
