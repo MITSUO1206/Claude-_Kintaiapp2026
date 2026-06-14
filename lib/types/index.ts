@@ -57,6 +57,7 @@ export interface AttendanceRecord {
   holiday_minutes: number
   is_holiday_work: boolean
   work_location: WorkLocation | null
+  shift_type: string | null
   is_locked: boolean
   status: AttendanceStatus
   created_at: string

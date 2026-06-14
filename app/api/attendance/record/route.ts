@@ -23,13 +23,22 @@ export async function PUT(request: NextRequest) {
     const db = withCompany(companyId)
 
     const body = await request.json()
-    const { work_date, clock_in, clock_out, break_minutes, work_location } = body as {
+    const { work_date, clock_in, clock_out, break_minutes, work_location, shift_type } = body as {
       work_date: string
       clock_in: string | null
       clock_out: string | null
       break_minutes: number
       work_location: string | null
+      shift_type: string | null
     }
+
+    // shift_type から status を決定
+    const VALID_SHIFTS = ['0800-1645', '0900-1745', '休日', '年休'] as const
+    const resolvedShift = (shift_type && (VALID_SHIFTS as readonly string[]).includes(shift_type)) ? shift_type : null
+    const resolvedStatus =
+      resolvedShift === '年休' ? 'leave_paid' :
+      resolvedShift === '休日' ? 'absent' :
+      'present'
 
     if (!work_date || !/^\d{4}-\d{2}-\d{2}$/.test(work_date)) {
       return NextResponse.json<ApiError>({ error: '日付が不正です' }, { status: 400 })
@@ -96,7 +105,8 @@ export async function PUT(request: NextRequest) {
           actual_minutes:   actualMinutes,
           overtime_minutes: overtimeMinutes,
           work_location:    work_location ?? null,
-          status:           'present',
+          shift_type:       resolvedShift,
+          status:           resolvedStatus,
         })
         .eq('id', ex.id)
         .select()
@@ -119,7 +129,8 @@ export async function PUT(request: NextRequest) {
         is_holiday_work:  false,
         is_locked:        false,
         work_location:    work_location ?? null,
-        status:           'present',
+        shift_type:       resolvedShift,
+        status:           resolvedStatus,
       })
       if (error) {
         return NextResponse.json<ApiError>({ error: '保存に失敗しました' }, { status: 500 })
