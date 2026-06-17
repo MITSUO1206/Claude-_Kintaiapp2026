@@ -152,6 +152,7 @@ export function AttendanceTable({
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 bg-gray-50 z-10">
             <tr className="border-b-2 border-gray-200">
+              <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 w-16"></th>
               <th className="px-3 py-2 text-left whitespace-nowrap text-xs font-medium text-gray-500 w-16">日付</th>
               <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 w-8">曜</th>
               <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 w-20">区分</th>
@@ -160,7 +161,6 @@ export function AttendanceTable({
               <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 w-20">退勤</th>
               <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 w-16">休憩</th>
               <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 w-16">実働</th>
-              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500"></th>
             </tr>
           </thead>
           <tbody>
@@ -188,6 +188,39 @@ export function AttendanceTable({
                   key={dateStr}
                   className={`border-b border-gray-100 ${rowBg} ${isEditing ? 'ring-2 ring-inset ring-blue-300' : ''}`}
                 >
+                  {/* 操作（先頭） */}
+                  <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                    {isEditing ? (
+                      <div className="flex items-center gap-1 justify-center">
+                        {error && (
+                          <span className="text-xs text-red-500 mr-1 max-w-24 truncate">{error}</span>
+                        )}
+                        <button
+                          onClick={() => handleSave(dateStr)}
+                          disabled={saving}
+                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded disabled:bg-blue-300 hover:bg-blue-700 transition-colors"
+                        >
+                          {saving ? '...' : '保存'}
+                        </button>
+                        <button
+                          onClick={() => { setEditingDate(null); setError('') }}
+                          className="px-2 py-1 border border-gray-300 text-gray-600 text-xs rounded hover:bg-gray-50 transition-colors"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    ) : !isLocked ? (
+                      <button
+                        onClick={() => startEdit(dateStr)}
+                        className="px-2 py-1 border border-gray-200 text-gray-400 text-xs rounded hover:border-blue-300 hover:text-blue-600 transition-colors"
+                      >
+                        編集
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-300">締済</span>
+                    )}
+                  </td>
+
                   {/* 日付 */}
                   <td className={`px-3 py-1.5 font-medium whitespace-nowrap ${textDay}`}>
                     {month}/{day}
@@ -296,39 +329,6 @@ export function AttendanceTable({
                     <span className="text-xs text-gray-700">
                       {isTimeOff ? '—' : minutesToHHMM(rec?.actual_minutes)}
                     </span>
-                  </td>
-
-                  {/* 操作 */}
-                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                    {isEditing ? (
-                      <div className="flex items-center gap-1 justify-end">
-                        {error && (
-                          <span className="text-xs text-red-500 mr-1 max-w-32 truncate">{error}</span>
-                        )}
-                        <button
-                          onClick={() => handleSave(dateStr)}
-                          disabled={saving}
-                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded disabled:bg-blue-300 hover:bg-blue-700 transition-colors"
-                        >
-                          {saving ? '...' : '保存'}
-                        </button>
-                        <button
-                          onClick={() => { setEditingDate(null); setError('') }}
-                          className="px-2 py-1 border border-gray-300 text-gray-600 text-xs rounded hover:bg-gray-50 transition-colors"
-                        >
-                          取消
-                        </button>
-                      </div>
-                    ) : !isLocked ? (
-                      <button
-                        onClick={() => startEdit(dateStr)}
-                        className="px-2 py-1 border border-gray-200 text-gray-400 text-xs rounded hover:border-blue-300 hover:text-blue-600 transition-colors"
-                      >
-                        編集
-                      </button>
-                    ) : isLocked ? (
-                      <span className="text-xs text-gray-300">締済</span>
-                    ) : null}
                   </td>
                 </tr>
               )

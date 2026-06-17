@@ -57,6 +57,7 @@ export function EmployeeDbClient({
   const [generateMsg, setGenerateMsg]   = useState('')
   const [copying, setCopying]           = useState(false)
   const [copyMsg, setCopyMsg]           = useState('')
+  const [fetchKey, setFetchKey]         = useState(0)
 
   // 当月・未来月のみ「先月分を反映」を許可
   const now = new Date()
@@ -104,6 +105,7 @@ export function EmployeeDbClient({
         }
       })
     )
+    setFetchKey((k) => k + 1)
   }, [])
 
   useEffect(() => {
@@ -346,7 +348,7 @@ export function EmployeeDbClient({
                 const s = summary.get(emp.id)
                 return (
                   <EmployeeRow
-                    key={`${emp.id}-${year}-${month}`}
+                    key={`${emp.id}-${year}-${month}-${fetchKey}`}
                     employee={emp}
                     fieldDefs={fieldDefs}
                     isEditing={editingId === emp.id}

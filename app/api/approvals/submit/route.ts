@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/requireAuth'
 import { withCompany } from '@/lib/db/withCompany'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { writeAuditLog } from '@/lib/audit/log'
 import type { MonthlyApproval, ApiError } from '@/lib/types'
 
@@ -56,6 +57,33 @@ export async function POST(request: NextRequest) {
       if (error) return NextResponse.json<ApiError>({ error: '申請に失敗しました' }, { status: 500 })
       const inserted = Array.isArray(data) ? data[0] : data
       approval = inserted as unknown as MonthlyApproval
+    }
+
+    // monthly_closings にも employee_confirmed_at を反映する（SELECT→UPDATE/INSERT）
+    const { data: existingClosing } = await supabaseAdmin
+      .from('monthly_closings')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month)
+      .single()
+
+    if (existingClosing) {
+      await supabaseAdmin
+        .from('monthly_closings')
+        .update({ employee_confirmed_at: submittedAt })
+        .eq('id', (existingClosing as { id: string }).id)
+    } else {
+      await supabaseAdmin
+        .from('monthly_closings')
+        .insert({
+          company_id: companyId,
+          user_id: userId,
+          year,
+          month,
+          employee_confirmed_at: submittedAt,
+        })
     }
 
     void writeAuditLog({

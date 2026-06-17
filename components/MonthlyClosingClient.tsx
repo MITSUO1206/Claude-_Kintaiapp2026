@@ -10,6 +10,8 @@ interface UserStatus {
   closing_id: string | null
   employee_confirmed_at: string | null
   closed_at: string | null
+  approval_status: string | null
+  approval_submitted_at: string | null
 }
 
 interface Props {
@@ -22,6 +24,7 @@ interface Props {
 export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [closingId, setClosingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [unlockId, setUnlockId] = useState<string | null>(null)
@@ -61,6 +64,35 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
     }
   }
 
+  async function closeOne(userId: string, name: string) {
+    if (!confirm(`${name} さんを締めますか？`)) return
+
+    setLoading(true)
+    setClosingId(userId)
+    setError('')
+    setSuccess('')
+
+    try {
+      const res = await fetch('/api/admin/monthly-closing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, month, user_ids: [userId] }),
+      })
+
+      const body = await res.json()
+      if (!res.ok) {
+        setError(body.error ?? '締め処理に失敗しました')
+        return
+      }
+
+      setSuccess(`${name} さんを締めました`)
+      router.refresh()
+    } finally {
+      setLoading(false)
+      setClosingId(null)
+    }
+  }
+
   async function unlock(closingId: string) {
     if (!unlockReason.trim()) {
       setError('ロック解除理由を入力してください')
@@ -92,8 +124,30 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
     }
   }
 
+  function approvalBadge(u: UserStatus) {
+    if (u.approval_status === 'submitted') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+          申請済
+          {u.approval_submitted_at && (
+            <span className="text-amber-500">
+              {new Date(u.approval_submitted_at).toLocaleDateString('ja-JP')}
+            </span>
+          )}
+        </span>
+      )
+    }
+    if (u.approval_status === 'approved') {
+      return <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">承認済</span>
+    }
+    if (u.approval_status === 'rejected') {
+      return <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">却下</span>
+    }
+    return <span className="text-xs text-gray-400">未申請</span>
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded">
           {error}
@@ -105,14 +159,16 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
         </div>
       )}
 
-      {notClosed.length > 0 && (
-        <button
-          onClick={closeAll}
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? '処理中...' : `未締め ${notClosed.length}名 を一括締め`}
-        </button>
+      {notClosed.length > 0 && isAdmin && (
+        <div className="flex justify-end">
+          <button
+            onClick={closeAll}
+            disabled={loading}
+            className="border border-blue-300 text-blue-600 px-3 py-1.5 rounded text-sm hover:bg-blue-50 disabled:opacity-50"
+          >
+            {loading && !closingId ? '処理中...' : `未締め ${notClosed.length}名 を一括締め`}
+          </button>
+        </div>
       )}
 
       <table className="w-full text-sm border rounded-lg overflow-hidden">
@@ -120,9 +176,10 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
           <tr>
             <th className="px-3 py-2 text-left">社員番号</th>
             <th className="px-3 py-2 text-left">氏名</th>
+            <th className="px-3 py-2 text-center">月末申請</th>
             <th className="px-3 py-2 text-center">確定申請</th>
             <th className="px-3 py-2 text-center">締め状態</th>
-            {isAdmin && <th className="px-3 py-2 text-left">操作</th>}
+            {isAdmin && <th className="px-3 py-2 text-center">操作</th>}
           </tr>
         </thead>
         <tbody>
@@ -130,15 +187,24 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
             <tr key={u.user_id} className="border-b hover:bg-gray-50">
               <td className="px-3 py-2 text-gray-500">{u.employee_code}</td>
               <td className="px-3 py-2 font-medium">{u.name}</td>
+
+              {/* 月末申請ステータス（monthly_approvals） */}
+              <td className="px-3 py-2 text-center">
+                {approvalBadge(u)}
+              </td>
+
+              {/* 確定申請日（monthly_closings.employee_confirmed_at） */}
               <td className="px-3 py-2 text-center">
                 {u.employee_confirmed_at ? (
                   <span className="text-xs text-blue-600">
                     {new Date(u.employee_confirmed_at).toLocaleDateString('ja-JP')}
                   </span>
                 ) : (
-                  <span className="text-xs text-gray-400">未申請</span>
+                  <span className="text-xs text-gray-400">—</span>
                 )}
               </td>
+
+              {/* 締め状態 */}
               <td className="px-3 py-2 text-center">
                 {u.closed_at ? (
                   <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">
@@ -150,9 +216,19 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
                   </span>
                 )}
               </td>
+
+              {/* 操作 */}
               {isAdmin && (
-                <td className="px-3 py-2">
-                  {u.closed_at && u.closing_id && (
+                <td className="px-3 py-2 text-center">
+                  {!u.closed_at ? (
+                    <button
+                      onClick={() => closeOne(u.user_id, u.name)}
+                      disabled={loading}
+                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {loading && closingId === u.user_id ? '処理中...' : '締め'}
+                    </button>
+                  ) : u.closing_id ? (
                     unlockId === u.closing_id ? (
                       <div className="space-y-1">
                         <input
@@ -160,9 +236,9 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
                           value={unlockReason}
                           onChange={(e) => setUnlockReason(e.target.value)}
                           placeholder="解除理由"
-                          className="border rounded px-2 py-1 text-xs w-40"
+                          className="border rounded px-2 py-1 text-xs w-32"
                         />
-                        <div className="flex gap-2">
+                        <div className="flex gap-1 justify-center">
                           <button
                             onClick={() => unlock(u.closing_id!)}
                             disabled={loading}
@@ -172,7 +248,7 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
                           </button>
                           <button
                             onClick={() => { setUnlockId(null); setUnlockReason('') }}
-                            className="text-xs text-gray-500"
+                            className="text-xs text-gray-500 border rounded px-2 py-1"
                           >
                             ×
                           </button>
@@ -186,7 +262,7 @@ export function MonthlyClosingClient({ year, month, users, isAdmin }: Props) {
                         ロック解除
                       </button>
                     )
-                  )}
+                  ) : null}
                 </td>
               )}
             </tr>

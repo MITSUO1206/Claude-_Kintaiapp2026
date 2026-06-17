@@ -1,4 +1,4 @@
-﻿import { cookies } from 'next/headers'
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { verifyJWT } from '@/lib/auth/jwt'
 import { withCompany } from '@/lib/db/withCompany'
@@ -24,27 +24,35 @@ export default async function MonthlyClosingPage({ searchParams }: { searchParam
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
 
   let year = sp.year ? parseInt(sp.year) : now.getFullYear()
-  let month = sp.month ? parseInt(sp.month) : now.getMonth()
+  let month = sp.month ? parseInt(sp.month) : now.getMonth() + 1
   if (month === 0) { month = 12; year-- }
 
   const db = withCompany(payload.company_id)
 
-  const [{ data: users }, { data: closings }] = await Promise.all([
+  const [{ data: users }, { data: closings }, { data: approvals }] = await Promise.all([
     db.select('users', 'id, employee_code, name').eq('is_active', true).order('employee_code'),
     db.select('monthly_closings', 'id, user_id, employee_confirmed_at, closed_at')
+      .eq('year', year)
+      .eq('month', month),
+    db.select('monthly_approvals', 'user_id, status, submitted_at')
       .eq('year', year)
       .eq('month', month),
   ])
 
   type UserRow = { id: string; employee_code: string; name: string }
   type ClosingRow = { id: string; user_id: string; employee_confirmed_at: string | null; closed_at: string | null }
+  type ApprovalRow = { user_id: string; status: string; submitted_at: string | null }
 
   const closingMap = new Map(
     ((closings ?? []) as unknown as ClosingRow[]).map((c) => [c.user_id, c])
   )
+  const approvalMap = new Map(
+    ((approvals ?? []) as unknown as ApprovalRow[]).map((a) => [a.user_id, a])
+  )
 
   const userStatuses = ((users ?? []) as unknown as UserRow[]).map((u) => {
     const c = closingMap.get(u.id)
+    const a = approvalMap.get(u.id)
     return {
       user_id: u.id,
       employee_code: u.employee_code,
@@ -52,6 +60,8 @@ export default async function MonthlyClosingPage({ searchParams }: { searchParam
       closing_id: c?.id ?? null,
       employee_confirmed_at: c?.employee_confirmed_at ?? null,
       closed_at: c?.closed_at ?? null,
+      approval_status: a?.status ?? null,
+      approval_submitted_at: a?.submitted_at ?? null,
     }
   })
 
@@ -66,7 +76,7 @@ export default async function MonthlyClosingPage({ searchParams }: { searchParam
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar userName={payload.name} />
 
-      <main className="max-w-4xl mx-auto p-4 space-y-4">
+      <main className="max-w-5xl mx-auto p-4 space-y-4 flex-1">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">月次締め</h1>
           <div className="flex items-center gap-2">
