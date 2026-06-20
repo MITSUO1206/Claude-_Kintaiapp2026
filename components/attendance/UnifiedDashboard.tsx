@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { AttendanceTable } from './AttendanceTable'
 import { MonthSummary } from './MonthSummary'
 import { ApprovalBanner } from './ApprovalBanner'
+import { MobileDayView } from './MobileDayView'
 import type { AttendanceRecord, MonthlyApproval } from '@/lib/types'
 
 interface UnifiedDashboardProps {
@@ -28,6 +29,11 @@ export function UnifiedDashboard({
   const [year,         setYear]         = useState(initialYear)
   const [month,        setMonth]        = useState(initialMonth)
   const [loading,      setLoading]      = useState(false)
+
+  const today = useMemo(() => {
+    const jst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+    return jst.toISOString().split('T')[0]
+  }, [])
 
   const summary = useMemo(() => ({
     total_days:       monthRecords.filter((r) => r.status === 'present').length,
@@ -72,69 +78,85 @@ export function UnifiedDashboard({
   }, [])
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* サイドバー */}
-      <aside className="w-44 min-h-screen bg-slate-800 flex flex-col flex-shrink-0">
-        <div className="px-4 py-4 border-b border-slate-700">
-          <span className="text-white font-bold text-base">KintaiApp</span>
-          <p className="text-slate-400 text-xs mt-0.5">勤怠・給与管理</p>
-        </div>
-        <nav className="flex-1 px-2 py-3 space-y-1">
-          {[
-            { href: '/dashboard', label: '勤怠' },
-            { href: '/payslips', label: '給与明細' },
-          ].map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-            >
-              {item.label}
+    <>
+      {/* ── スマホ表示（md未満） ── */}
+      <div className="md:hidden">
+        <MobileDayView
+          userName={userName}
+          monthRecords={monthRecords}
+          year={year}
+          month={month}
+          initialDate={today}
+          onSaved={handleSaved}
+          onMonthChange={handleMonthChange}
+        />
+      </div>
+
+      {/* ── PC表示（md以上） ── */}
+      <div className="hidden md:flex min-h-screen bg-gray-50">
+        {/* サイドバー */}
+        <aside className="w-44 min-h-screen bg-slate-800 flex flex-col flex-shrink-0">
+          <div className="px-4 py-4 border-b border-slate-700">
+            <span className="text-white font-bold text-base">KintaiApp</span>
+            <p className="text-slate-400 text-xs mt-0.5">勤怠・給与管理</p>
+          </div>
+          <nav className="flex-1 px-2 py-3 space-y-1">
+            {[
+              { href: '/dashboard', label: '勤怠' },
+              { href: '/payslips', label: '給与明細' },
+            ].map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+          <div className="px-3 py-3 border-t border-slate-700">
+            <p className="text-slate-300 text-xs truncate mb-2">{userName}</p>
+            <a href="/api/auth/logout" className="text-slate-400 hover:text-slate-200 text-xs transition-colors">
+              ログアウト
             </a>
-          ))}
-        </nav>
-        <div className="px-3 py-3 border-t border-slate-700">
-          <p className="text-slate-300 text-xs truncate mb-2">{userName}</p>
-          <a href="/api/auth/logout" className="text-slate-400 hover:text-slate-200 text-xs transition-colors">
-            ログアウト
-          </a>
-        </div>
-      </aside>
+          </div>
+        </aside>
 
-      {/* メインコンテンツ */}
-      <main className="flex-1 flex flex-col min-h-screen">
-        {/* サマリーバー */}
-        <div className="px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0">
-          <MonthSummary
-            totalDays={summary.total_days}
-            totalMinutes={summary.total_minutes}
-            overtimeMinutes={summary.overtime_minutes}
-          />
-        </div>
+        {/* メインコンテンツ */}
+        <main className="flex-1 flex flex-col min-h-screen">
+          {/* サマリーバー */}
+          <div className="px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0">
+            <MonthSummary
+              totalDays={summary.total_days}
+              totalMinutes={summary.total_minutes}
+              overtimeMinutes={summary.overtime_minutes}
+            />
+          </div>
 
-        {/* 勤怠テーブル */}
-        <div className={`flex-1 bg-white ${loading ? 'opacity-60 pointer-events-none' : ''}`}>
-          <AttendanceTable
-            records={monthRecords}
-            year={year}
-            month={month}
-            userId={userId}
-            isAdmin={false}
-            onSaved={handleSaved}
-            onMonthChange={handleMonthChange}
-          />
-        </div>
+          {/* 勤怠テーブル */}
+          <div className={`flex-1 bg-white ${loading ? 'opacity-60 pointer-events-none' : ''}`}>
+            <AttendanceTable
+              records={monthRecords}
+              year={year}
+              month={month}
+              userId={userId}
+              isAdmin={false}
+              onSaved={handleSaved}
+              onMonthChange={handleMonthChange}
+            />
+          </div>
 
-        {/* 締め承認バナー */}
-        <div className="px-6 py-3 border-t border-gray-100 bg-white flex-shrink-0">
-          <ApprovalBanner
-            year={year}
-            month={month}
-            approval={approval}
-            onSubmitted={setApproval}
-          />
-        </div>
-      </main>
-    </div>
+          {/* 締め承認バナー */}
+          <div className="px-6 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+            <ApprovalBanner
+              year={year}
+              month={month}
+              approval={approval}
+              onSubmitted={setApproval}
+            />
+          </div>
+        </main>
+      </div>
+    </>
   )
 }
