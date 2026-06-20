@@ -104,6 +104,36 @@ export async function POST(request: NextRequest) {
     }
 
     const inserted = Array.isArray(data) ? data[0] : data
+    const newUserId = (inserted as { id: string }).id
+
+    // 今年度の有給残高を初期作成
+    const now = new Date()
+    const fiscalYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+    await db.insert('leave_balances', {
+      user_id: newUserId,
+      fiscal_year: fiscalYear,
+      total_days: 0,
+      used_days: 0,
+    })
+
+    // アクティブなフィールド定義に対して employee_field_values を初期作成
+    const { data: fieldDefs } = await db
+      .select('employee_field_defs', 'id, label, category')
+      .eq('is_active', true)
+
+    type FieldDef = { id: string; label: string; category: string }
+    const defs = (fieldDefs ?? []) as unknown as FieldDef[]
+    if (defs.length > 0) {
+      for (const def of defs) {
+        await db.insert('employee_field_values', {
+          user_id: newUserId,
+          field_id: def.id,
+          label: def.label,
+          category: def.category,
+          amount: 0,
+        })
+      }
+    }
 
     await writeAuditLog({
       company_id: payload.company_id,

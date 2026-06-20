@@ -6,7 +6,7 @@ import { MonthSummary } from './MonthSummary'
 import { ApprovalBanner } from './ApprovalBanner'
 import { MobileDayView } from './MobileDayView'
 import { ComplianceBar } from './ComplianceBar'
-import type { AttendanceRecord, MonthlyApproval, ComplianceSummary } from '@/lib/types'
+import type { AttendanceRecord, MonthlyApproval, ComplianceSummary, WorkRulePattern } from '@/lib/types'
 
 interface UnifiedDashboardProps {
   userName: string
@@ -15,6 +15,7 @@ interface UnifiedDashboardProps {
   initialApproval: MonthlyApproval | null
   initialYear: number
   initialMonth: number
+  workPattern?: Pick<WorkRulePattern, 'id' | 'name' | 'start_time' | 'end_time' | 'break_minutes'> | null
 }
 
 export function UnifiedDashboard({
@@ -24,6 +25,7 @@ export function UnifiedDashboard({
   initialApproval,
   initialYear,
   initialMonth,
+  workPattern,
 }: UnifiedDashboardProps) {
   const [monthRecords, setMonthRecords] = useState(initialMonthRecords)
   const [approval,     setApproval]     = useState<MonthlyApproval | null>(initialApproval)
@@ -113,6 +115,8 @@ export function UnifiedDashboard({
           onMonthChange={handleMonthChange}
           complianceData={complianceData}
           complianceLoading={complianceLoading}
+          workPattern={workPattern ?? null}
+          approval={approval}
         />
       </div>
 
@@ -166,6 +170,7 @@ export function UnifiedDashboard({
               month={month}
               userId={userId}
               isAdmin={false}
+              approval={approval}
               onSaved={handleSaved}
               onMonthChange={handleMonthChange}
             />

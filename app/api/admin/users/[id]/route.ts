@@ -109,6 +109,11 @@ export async function DELETE(
       return NextResponse.json<ApiError>({ error: '無効化に失敗しました' }, { status: 500 })
     }
 
+    // 未処理の申請を一括キャンセル
+    await db.update('requests', { status: 'cancelled' })
+      .eq('user_id', id)
+      .eq('status', 'pending')
+
     await writeAuditLog({
       company_id: payload.company_id,
       user_id: payload.user_id,

@@ -5,7 +5,7 @@ import { writeAuditLog } from '@/lib/audit/log'
 import type { ApiError, AttendanceRecord } from '@/lib/types'
 
 type UserRow    = { id: string; employee_code: string; name: string; salary_type: string; work_rule_pattern_id: string | null }
-type PatternRow = { id: string; start_time: string; end_time: string }
+type PatternRow = { id: string; name: string; start_time: string; end_time: string }
 
 export async function GET(request: NextRequest) {
   try {
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const [{ data: users }, { data: records }, { data: patterns }] = await Promise.all([
       usersQuery.order('employee_code', { ascending: true }),
       db.select('attendance_records').gte('work_date', from).lte('work_date', to),
-      db.select('work_rule_patterns', 'id, start_time, end_time'),
+      db.select('work_rule_patterns', 'id, name, start_time, end_time'),
     ])
 
     const typedUsers    = (users    ?? []) as unknown as UserRow[]
@@ -81,13 +81,13 @@ export async function GET(request: NextRequest) {
         '実働時間(h)', '残業時間(h)', '深夜時間(h)', '休日出勤', 'ステータス',
       ]
 
-      // レコードを日付昇順・社員番号昇順でソート
+      // レコードを社員番号昇順・日付昇順でソート
       const sorted = [...typedRecords].sort((a, b) => {
-        const dateComp = a.work_date.localeCompare(b.work_date)
-        if (dateComp !== 0) return dateComp
         const ua = userMap.get(a.user_id)?.employee_code ?? ''
         const ub = userMap.get(b.user_id)?.employee_code ?? ''
-        return ua.localeCompare(ub)
+        const codeComp = ua.localeCompare(ub)
+        if (codeComp !== 0) return codeComp
+        return a.work_date.localeCompare(b.work_date)
       })
 
       rows = sorted.map((r) => {
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
         if (!user) return []
         const pattern = user.work_rule_pattern_id ? patternMap.get(user.work_rule_pattern_id) : null
         const patternLabel = pattern
-          ? `${pattern.start_time.slice(0, 5)}〜${pattern.end_time.slice(0, 5)}`
+          ? `${pattern.name} (${pattern.start_time.slice(0, 5)}〜${pattern.end_time.slice(0, 5)})`
           : 'デフォルト'
         const d       = new Date(r.work_date)
         const weekday = DAY_LABELS[d.getDay()]
@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
         const salaryLabel  = user.salary_type === 'monthly' ? '月給' : '時給'
         const pattern      = user.work_rule_pattern_id ? patternMap.get(user.work_rule_pattern_id) : null
         const patternLabel = pattern
-          ? `${pattern.start_time.slice(0, 5)}〜${pattern.end_time.slice(0, 5)}`
+          ? `${pattern.name} (${pattern.start_time.slice(0, 5)}〜${pattern.end_time.slice(0, 5)})`
           : 'デフォルト'
         return [
           user.employee_code, user.name, salaryLabel, patternLabel, period,

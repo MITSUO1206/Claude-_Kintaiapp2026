@@ -116,6 +116,23 @@ export async function PUT(request: NextRequest) {
       overtimeMinutes = Math.max(0, actualMinutes - scheduledMinutes)
     }
 
+    // 月次申請済み（submitted / approved）の場合は編集不可
+    const [year, mon] = work_date.split('-').map(Number)
+    const { data: approvalRow } = await db
+      .select('monthly_approvals', 'status')
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', mon)
+      .single()
+    type ApRow2 = { status: string }
+    const approvalStatus = (approvalRow as unknown as ApRow2 | null)?.status ?? 'draft'
+    if (approvalStatus === 'submitted' || approvalStatus === 'approved') {
+      return NextResponse.json<ApiError>(
+        { error: '月次申請済みのため編集できません。管理者に連絡してください。' },
+        { status: 403 }
+      )
+    }
+
     const { data: existing } = await db
       .select('attendance_records', 'id, is_locked, status')
       .eq('user_id', userId)

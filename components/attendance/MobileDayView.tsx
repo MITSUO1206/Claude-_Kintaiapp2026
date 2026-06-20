@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import type { AttendanceRecord, WorkLocation, ComplianceSummary } from '@/lib/types'
+import type { AttendanceRecord, WorkLocation, ComplianceSummary, WorkRulePattern, MonthlyApproval } from '@/lib/types'
 import { MobileMonthlyList } from './MobileMonthlyList'
 import { ComplianceBar } from './ComplianceBar'
 
@@ -15,6 +15,8 @@ interface MobileDayViewProps {
   onMonthChange: (year: number, month: number) => void
   complianceData: ComplianceSummary | null
   complianceLoading: boolean
+  workPattern: Pick<WorkRulePattern, 'id' | 'name' | 'start_time' | 'end_time' | 'break_minutes'> | null
+  approval: MonthlyApproval | null
 }
 
 const WORK_LOCATIONS: { value: WorkLocation; label: string }[] = [
@@ -24,7 +26,16 @@ const WORK_LOCATIONS: { value: WorkLocation; label: string }[] = [
   { value: 'other',     label: 'その他' },
 ]
 
-const DEFAULT_SHIFTS = ['0800-1645', '0900-1745', '休日', '年休']
+const NON_TIME_SHIFTS = ['休日', '年休']
+
+function toHHMM(timeStr: string): string {
+  // "09:00:00" → "0900"
+  return timeStr.slice(0, 5).replace(':', '')
+}
+
+function patternToShiftLabel(startTime: string, endTime: string): string {
+  return `${toHHMM(startTime)}-${toHHMM(endTime)}`
+}
 
 function isoToHHMM(iso: string | null): string {
   if (!iso) return ''
@@ -66,11 +77,19 @@ function offsetDate(dateStr: string, delta: number): string {
 
 export function MobileDayView({
   userName, monthRecords, year, month, initialDate, onSaved, onMonthChange,
-  complianceData, complianceLoading,
+  complianceData, complianceLoading, workPattern, approval,
 }: MobileDayViewProps) {
+  const isMonthLocked = approval?.status === 'submitted' || approval?.status === 'approved'
+
+  const patternShift = workPattern
+    ? patternToShiftLabel(workPattern.start_time, workPattern.end_time)
+    : null
+
   const [currentDate,  setCurrentDate]  = useState(initialDate)
-  const [shiftTypes,   setShiftTypes]   = useState<string[]>(DEFAULT_SHIFTS)
-  const [shiftType,    setShiftType]    = useState('0900-1745')
+  const [shiftTypes,   setShiftTypes]   = useState<string[]>(
+    patternShift ? [patternShift, ...NON_TIME_SHIFTS] : ['0900-1745', ...NON_TIME_SHIFTS]
+  )
+  const [shiftType,    setShiftType]    = useState(patternShift ?? '0900-1745')
   const [clockIn,      setClockIn]      = useState('')
   const [clockOut,     setClockOut]     = useState('')
   const [breakMinutes, setBreakMinutes] = useState(60)
@@ -86,7 +105,7 @@ export function MobileDayView({
   )
 
   const currentRecord     = recordMap.get(currentDate) ?? null
-  const isLocked          = currentRecord?.is_locked ?? false
+  const isLocked          = (currentRecord?.is_locked ?? false) || isMonthLocked
   const isTimeOff         = shiftType === '休日' || shiftType === '年休'
   const isClockInRecorded = !!currentRecord?.clock_in
 
@@ -94,16 +113,22 @@ export function MobileDayView({
     fetch('/api/shift-types')
       .then((r) => r.json())
       .then((data: { shift_types?: string[] }) => {
-        if (Array.isArray(data.shift_types) && data.shift_types.length > 0) {
+        if (!Array.isArray(data.shift_types)) return
+        if (patternShift) {
+          // パターンの時間を先頭に固定し、非時間系（休日・年休など）だけAPIから追加
+          const nonTime = data.shift_types.filter((s) => !/^\d{4}-\d{4}$/.test(s))
+          setShiftTypes([patternShift, ...nonTime])
+        } else if (data.shift_types.length > 0) {
           setShiftTypes(data.shift_types)
         }
       })
       .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     const rec = recordMap.get(currentDate)
-    setShiftType(rec?.shift_type ?? '0900-1745')
+    setShiftType(rec?.shift_type ?? patternShift ?? '0900-1745')
     setClockIn(isoToHHMM(rec?.clock_in ?? null))
     setClockOut(isoToHHMM(rec?.clock_out ?? null))
     setBreakMinutes(rec?.break_minutes ?? 60)
@@ -284,7 +309,7 @@ export function MobileDayView({
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-400 bg-white"
             >
               {shiftTypes.map((st) => (
-                <option key={st} value={st}>{st}</option>
+                <option key={st} value={st}>{parseShiftLabel(st)}</option>
               ))}
             </select>
           </div>
@@ -298,7 +323,9 @@ export function MobileDayView({
 
           {/* 保存ボタン */}
           {isLocked ? (
-            <div className="text-center text-xs text-gray-400 py-2">締め済みのため編集不可</div>
+            <div className={`text-center text-xs py-2 ${isMonthLocked ? 'text-amber-500' : 'text-gray-400'}`}>
+              {isMonthLocked ? '月次申請済みのため編集不可' : '締め済みのため編集不可'}
+            </div>
           ) : (
             <button
               onClick={handleSave}

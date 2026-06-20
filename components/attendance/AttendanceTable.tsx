@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { AttendanceRecord, WorkLocation } from '@/lib/types'
+import type { AttendanceRecord, WorkLocation, MonthlyApproval } from '@/lib/types'
 
 const DEFAULT_SHIFTS = ['0800-1645', '0900-1745', '休日', '年休']
 
@@ -11,6 +11,7 @@ interface AttendanceTableProps {
   month: number
   userId: string
   isAdmin?: boolean
+  approval?: MonthlyApproval | null
   onSaved: (record: AttendanceRecord) => void
   onMonthChange: (year: number, month: number) => void
 }
@@ -47,8 +48,9 @@ interface EditState {
 }
 
 export function AttendanceTable({
-  records, year, month, userId, isAdmin = false, onSaved, onMonthChange,
+  records, year, month, userId, isAdmin = false, approval, onSaved, onMonthChange,
 }: AttendanceTableProps) {
+  const isMonthLocked = !isAdmin && (approval?.status === 'submitted' || approval?.status === 'approved')
   const [editingDate, setEditingDate] = useState<string | null>(null)
   const [editState, setEditState] = useState<EditState>({
     shiftType: '0900-1745', clockIn: '', clockOut: '', breakMinutes: 60, workLocation: '',
@@ -171,7 +173,7 @@ export function AttendanceTable({
               const isSat = dow === 6
               const isSun = dow === 0
               const isEditing = editingDate === dateStr
-              const isLocked = (rec?.is_locked ?? false) && !isAdmin
+              const isLocked = ((rec?.is_locked ?? false) || isMonthLocked) && !isAdmin
               const isWeekend = isSat || isSun
               const isTimeOff = rec?.shift_type === '休日' || rec?.shift_type === '年休'
               const editIsTimeOff = editState.shiftType === '休日' || editState.shiftType === '年休'
@@ -216,6 +218,8 @@ export function AttendanceTable({
                       >
                         編集
                       </button>
+                    ) : isMonthLocked ? (
+                      <span className="text-xs text-amber-400">申請中</span>
                     ) : (
                       <span className="text-xs text-gray-300">締済</span>
                     )}
