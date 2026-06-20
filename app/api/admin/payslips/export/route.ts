@@ -8,6 +8,69 @@ function yen(v: number): string {
   return String(Math.round(v))
 }
 
+function buildBankTransferCsv(rows: Payslip[], userMap: Map<string, { id: string; name: string; employee_code: string; salary_type: string; hired_at: string }>, year: number, month: number): string {
+  const BOM = '﻿'
+  const headers = ['社員番号', '氏名', '振込金額（円）', '銀行名', '支店コード', '口座種別（普通/当座）', '口座番号', '口座名義（カナ）', '備考']
+  const csvRows = rows.map((p) => {
+    const u = userMap.get(p.user_id)
+    return [
+      u?.employee_code ?? '',
+      u?.name          ?? '',
+      yen(p.net_pay),
+      '', '', '', '', '',   // bank fields — to be filled
+      `${year}年${month}月給与`,
+    ].join(',')
+  })
+  return BOM + [headers.join(','), ...csvRows].join('\n')
+}
+
+function buildFreeeCsv(rows: Payslip[], userMap: Map<string, { id: string; name: string; employee_code: string; salary_type: string; hired_at: string }>, year: number, month: number): string {
+  const BOM = '﻿'
+  // freee給与 インポートフォーマット（標準列）
+  const headers = [
+    '従業員番号', '姓', '名', '支払年月', '給与形態',
+    '勤務日数', '欠勤日数', '有給取得日数',
+    '所定外労働時間', '深夜労働時間', '休日出勤日数',
+    '基本給', '時間外手当', '深夜手当', '休日手当', '通勤手当', 'その他手当',
+    '健康保険料', '厚生年金保険料', '雇用保険料', '所得税', '住民税', 'その他控除',
+    '差引支給額',
+  ]
+  const paymentDate = `${year}/${String(month).padStart(2, '0')}`
+  const csvRows = rows.map((p) => {
+    const u = userMap.get(p.user_id)
+    const nameParts = (u?.name ?? '').split(/[\s　]/)
+    const lastName  = nameParts[0] ?? u?.name ?? ''
+    const firstName = nameParts.slice(1).join('') ?? ''
+    return [
+      u?.employee_code ?? '',
+      lastName,
+      firstName,
+      paymentDate,
+      u?.salary_type === 'hourly' ? '時給' : '月給',
+      p.work_days,
+      p.absent_days,
+      p.paid_leave_days,
+      p.overtime_hours,
+      p.night_hours,
+      p.holiday_work_days,
+      yen(p.base_salary),
+      yen(p.overtime_pay),
+      yen(p.night_pay),
+      yen(p.holiday_pay),
+      yen(p.commuting_allowance),
+      yen(p.other_allowance),
+      yen(p.health_insurance),
+      yen(p.pension),
+      yen(p.employment_insurance),
+      yen(p.income_tax),
+      yen(p.resident_tax),
+      yen(p.other_deduction),
+      yen(p.net_pay),
+    ].join(',')
+  })
+  return BOM + [headers.join(','), ...csvRows].join('\n')
+}
+
 export async function GET(request: NextRequest) {
   try {
     const payload = await requireAuth(request)
@@ -15,9 +78,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json<ApiError>({ error: '管理者のみ操作可能です' }, { status: 403 })
     }
 
-    const url = new URL(request.url)
-    const year  = parseInt(url.searchParams.get('year')  ?? String(new Date().getFullYear()))
-    const month = parseInt(url.searchParams.get('month') ?? String(new Date().getMonth() + 1))
+    const url    = new URL(request.url)
+    const year   = parseInt(url.searchParams.get('year')   ?? String(new Date().getFullYear()))
+    const month  = parseInt(url.searchParams.get('month')  ?? String(new Date().getMonth() + 1))
+    const format = url.searchParams.get('format') ?? 'standard'  // standard | bank | freee
 
     const db = withCompany(payload.company_id)
 
@@ -84,21 +148,33 @@ export async function GET(request: NextRequest) {
       ].join(',')
     })
 
-    const csv = BOM + [headers.join(','), ...csvRows].join('\n')
+    let csv: string
+    let filename: string
+
+    if (format === 'bank') {
+      csv      = buildBankTransferCsv(rows, userMap, year, month)
+      filename = `bank_transfer_${year}${String(month).padStart(2, '0')}.csv`
+    } else if (format === 'freee') {
+      csv      = buildFreeeCsv(rows, userMap, year, month)
+      filename = `freee_kyuyo_${year}${String(month).padStart(2, '0')}.csv`
+    } else {
+      csv      = BOM + [headers.join(','), ...csvRows].join('\n')
+      filename = `chingin_daichou_${year}${String(month).padStart(2, '0')}.csv`
+    }
 
     await writeAuditLog({
       company_id: payload.company_id,
       user_id: payload.user_id,
       action: 'payslip_export',
       table_name: 'payslips',
-      new_values: { year, month, count: rows.length },
+      new_values: { year, month, count: rows.length, format },
       ip_address: request.headers.get('x-forwarded-for') ?? 'unknown',
     })
 
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="chingin_daichou_${year}${String(month).padStart(2,'0')}.csv"`,
+        'Content-Disposition': `attachment; filename="${filename}"`,
       },
     })
   } catch {

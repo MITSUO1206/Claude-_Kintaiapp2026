@@ -73,6 +73,25 @@ export default function OvertimeAlertsPage() {
   const dangerCount  = data?.alerts.filter((a) => a.status === 'danger').length  ?? 0
   const warningCount = data?.alerts.filter((a) => a.status === 'warning').length ?? 0
 
+  const [sending, setSending] = useState(false)
+  const [sendMsg, setSendMsg] = useState('')
+
+  async function handleSendAlerts() {
+    setSending(true)
+    setSendMsg('')
+    try {
+      const res = await fetch('/api/admin/overtime-alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, month }),
+      })
+      const d = await res.json()
+      setSendMsg(res.ok ? `${d.sent}名分のアラートメールを管理者(${d.recipients}名)に送信しました` : d.error ?? 'エラーが発生しました')
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar userName={userName} />
@@ -80,13 +99,25 @@ export default function OvertimeAlertsPage() {
       <main className="flex-1 p-6">
         <div className="max-w-6xl mx-auto space-y-4">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h1 className="text-xl font-bold text-gray-800">36協定アラート</h1>
               <p className="text-sm text-gray-500 mt-0.5">月・年間残業時間の上限管理</p>
             </div>
-            {/* Month picker */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Alert email button */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSendAlerts}
+                  disabled={sending || (dangerCount === 0 && warningCount === 0)}
+                  className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {sending ? '送信中...' : `アラートメール送信 (${dangerCount + warningCount}名)`}
+                </button>
+                {sendMsg && <span className="text-xs text-green-600">{sendMsg}</span>}
+              </div>
+              {/* Month picker */}
+              <div className="flex items-center gap-2">
               <button
                 onClick={() => { if (month === 1) { setYear(y => y - 1); setMonth(12) } else { setMonth(m => m - 1) } }}
                 className="p-1.5 rounded border hover:bg-gray-100"
@@ -102,6 +133,7 @@ export default function OvertimeAlertsPage() {
               >
                 ▶
               </button>
+            </div>
             </div>
           </div>
 

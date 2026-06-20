@@ -5,6 +5,7 @@ import { withCompany } from '@/lib/db/withCompany'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { AdminSidebar } from '@/components/AdminSidebar'
 import { LeaveManagementTable } from '@/components/admin/LeaveManagementTable'
+import { PaidLeaveObligationAlert } from '@/components/admin/PaidLeaveObligationAlert'
 import { processAutoGrants } from '@/lib/leave/autoGrant'
 import { calcTenureStr, getNextGrantCycle, toDateStr } from '@/lib/leave/grantCalc'
 import type { LeaveUserRow } from '@/components/admin/LeaveManagementTable'
@@ -111,9 +112,13 @@ export default async function LeaveManagementPage() {
 
       <main className="flex-1 p-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-1">有給管理</h1>
-        <p className="text-sm text-gray-400 mb-6">{fiscalYear}年度 ／ 入社日基準個人サイクル</p>
+        <p className="text-sm text-gray-400 mb-4">{fiscalYear}年度 ／ 入社日基準個人サイクル</p>
 
-        <LeaveManagementTable rows={rows} fiscalYear={fiscalYear} />
+        <PaidLeaveObligationAlert />
+
+        <div className="mt-4">
+          <LeaveManagementTable rows={rows} fiscalYear={fiscalYear} />
+        </div>
 
         <div className="mt-4 text-xs text-gray-400 space-y-1">
           <p>※ 行をクリックすると付与履歴が展開されます。</p>
