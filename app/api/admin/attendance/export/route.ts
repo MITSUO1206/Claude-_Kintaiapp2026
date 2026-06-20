@@ -159,11 +159,17 @@ export async function GET(request: NextRequest) {
         : `kintai_${from}_${to}.csv`
     }
 
+    const csvContent =
+      BOM +
+      [headers, ...rows]
+        .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
+        .join('\r\n')
+
     await writeAuditLog({
       company_id: payload.company_id,
       user_id: payload.user_id,
       action: 'attendance_csv_export',
-      new_values: { period, user_id: userIdParam ?? 'all' },
+      new_values: { period, type: typeParam ?? 'summary', user_id: userIdParam ?? 'all' },
     })
 
     return new NextResponse(csvContent, {
