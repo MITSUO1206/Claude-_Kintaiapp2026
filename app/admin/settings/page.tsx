@@ -29,7 +29,7 @@ export default async function AdminSettingsPage() {
   return (
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar userName={payload.name} />
-      <main className="flex-1 p-6 space-y-6 max-w-lg">
+      <main className="flex-1 p-6 space-y-6 max-w-4xl">
         <h1 className="text-2xl font-bold text-gray-800">会社設定</h1>
         <WorkRuleForm initialRule={rule as unknown as WorkRule | null} />
         <ShiftTypeManager initialShiftTypes={shiftTypes} />
