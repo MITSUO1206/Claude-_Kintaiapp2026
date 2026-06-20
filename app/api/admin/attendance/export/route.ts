@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
     const fromParam   = url.searchParams.get('from')
     const toParam     = url.searchParams.get('to')
     const userIdParam = url.searchParams.get('user_id')
+    const typeParam   = url.searchParams.get('type') // 'summary'(default) | 'detail'
 
     if (!yearParam && !fromParam) {
       return NextResponse.json<ApiError>(
@@ -59,51 +60,104 @@ export async function GET(request: NextRequest) {
       ? `${yearParam}年${monthParam ?? ''}月`
       : `${from}〜${to}`
 
+    const userMap = new Map(typedUsers.map((u) => [u.id, u]))
+
+    const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
+    const STATUS_LABELS: Record<string, string> = {
+      present: '出勤', absent: '欠勤', leave_paid: '年休',
+      leave_special: '特休', holiday: '休日',
+    }
+
     const BOM = '﻿'
-    const headers = [
-      '社員番号', '氏名', '雇用形態', '勤務パターン', '対象年月',
-      '出勤日数', '実働時間(h)', '残業時間(h)',
-      '深夜時間(h)', '休日出勤日数', '有給取得日数',
-    ]
+    let headers: string[]
+    let rows: string[][]
+    let filename: string
 
-    const rows = typedUsers.map((user) => {
-      const userRecords = typedRecords.filter((r) => r.user_id === user.id)
-      const total_days   = userRecords.filter((r) => r.status === 'present').length
-      const total_min    = userRecords.reduce((s, r) => s + (r.actual_minutes   ?? 0), 0)
-      const ot_min       = userRecords.reduce((s, r) => s + (r.overtime_minutes ?? 0), 0)
-      const night_min    = userRecords.reduce((s, r) => s + r.night_minutes, 0)
-      const holiday_days = userRecords.filter((r) => r.is_holiday_work).length
-      const leave_days   = userRecords.filter((r) => r.status === 'leave_paid').length
-      const salaryLabel  = user.salary_type === 'monthly' ? '月給' : '時給'
-      const pattern      = user.work_rule_pattern_id ? patternMap.get(user.work_rule_pattern_id) : null
-      const patternLabel = pattern
-        ? `${pattern.start_time.slice(0, 5)}〜${pattern.end_time.slice(0, 5)}`
-        : 'デフォルト'
+    if (typeParam === 'detail') {
+      // ── 日別全データ ──────────────────────────────
+      headers = [
+        '社員番号', '氏名', '勤務パターン', '日付', '曜日',
+        '区分', '就業場所', '出勤時刻', '退勤時刻', '休憩(分)',
+        '実働時間(h)', '残業時間(h)', '深夜時間(h)', '休日出勤', 'ステータス',
+      ]
 
-      return [
-        user.employee_code,
-        user.name,
-        salaryLabel,
-        patternLabel,
-        period,
-        total_days,
-        (total_min / 60).toFixed(1),
-        (ot_min   / 60).toFixed(1),
-        (night_min / 60).toFixed(1),
-        holiday_days,
-        leave_days,
-      ].map(String)
-    })
+      // レコードを日付昇順・社員番号昇順でソート
+      const sorted = [...typedRecords].sort((a, b) => {
+        const dateComp = a.work_date.localeCompare(b.work_date)
+        if (dateComp !== 0) return dateComp
+        const ua = userMap.get(a.user_id)?.employee_code ?? ''
+        const ub = userMap.get(b.user_id)?.employee_code ?? ''
+        return ua.localeCompare(ub)
+      })
 
-    const csvContent =
-      BOM +
-      [headers, ...rows]
-        .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
-        .join('\r\n')
+      rows = sorted.map((r) => {
+        const user    = userMap.get(r.user_id)
+        if (!user) return []
+        const pattern = user.work_rule_pattern_id ? patternMap.get(user.work_rule_pattern_id) : null
+        const patternLabel = pattern
+          ? `${pattern.start_time.slice(0, 5)}〜${pattern.end_time.slice(0, 5)}`
+          : 'デフォルト'
+        const d       = new Date(r.work_date)
+        const weekday = DAY_LABELS[d.getDay()]
+        const toHHMM  = (iso: string | null) => iso ? iso.slice(11, 16) : ''
+        return [
+          user.employee_code,
+          user.name,
+          patternLabel,
+          r.work_date,
+          weekday,
+          r.shift_type ?? '',
+          r.work_location ?? '',
+          toHHMM(r.clock_in),
+          toHHMM(r.clock_out),
+          String(r.break_minutes ?? 0),
+          ((r.actual_minutes   ?? 0) / 60).toFixed(2),
+          ((r.overtime_minutes ?? 0) / 60).toFixed(2),
+          (r.night_minutes / 60).toFixed(2),
+          r.is_holiday_work ? '○' : '',
+          STATUS_LABELS[r.status] ?? r.status,
+        ]
+      }).filter((row) => row.length > 0)
 
-    const filename = yearParam
-      ? `kintai_${yearParam}${String(monthParam ?? '').padStart(2, '0')}.csv`
-      : `kintai_${from}_${to}.csv`
+      filename = yearParam
+        ? `kintai_detail_${yearParam}${String(monthParam ?? '').padStart(2, '0')}.csv`
+        : `kintai_detail_${from}_${to}.csv`
+    } else {
+      // ── 月次サマリ（既存） ────────────────────────
+      headers = [
+        '社員番号', '氏名', '雇用形態', '勤務パターン', '対象年月',
+        '出勤日数', '実働時間(h)', '残業時間(h)',
+        '深夜時間(h)', '休日出勤日数', '有給取得日数',
+      ]
+
+      rows = typedUsers.map((user) => {
+        const userRecords  = typedRecords.filter((r) => r.user_id === user.id)
+        const total_days   = userRecords.filter((r) => r.status === 'present').length
+        const total_min    = userRecords.reduce((s, r) => s + (r.actual_minutes   ?? 0), 0)
+        const ot_min       = userRecords.reduce((s, r) => s + (r.overtime_minutes ?? 0), 0)
+        const night_min    = userRecords.reduce((s, r) => s + r.night_minutes, 0)
+        const holiday_days = userRecords.filter((r) => r.is_holiday_work).length
+        const leave_days   = userRecords.filter((r) => r.status === 'leave_paid').length
+        const salaryLabel  = user.salary_type === 'monthly' ? '月給' : '時給'
+        const pattern      = user.work_rule_pattern_id ? patternMap.get(user.work_rule_pattern_id) : null
+        const patternLabel = pattern
+          ? `${pattern.start_time.slice(0, 5)}〜${pattern.end_time.slice(0, 5)}`
+          : 'デフォルト'
+        return [
+          user.employee_code, user.name, salaryLabel, patternLabel, period,
+          String(total_days),
+          (total_min  / 60).toFixed(1),
+          (ot_min     / 60).toFixed(1),
+          (night_min  / 60).toFixed(1),
+          String(holiday_days),
+          String(leave_days),
+        ]
+      })
+
+      filename = yearParam
+        ? `kintai_${yearParam}${String(monthParam ?? '').padStart(2, '0')}.csv`
+        : `kintai_${from}_${to}.csv`
+    }
 
     await writeAuditLog({
       company_id: payload.company_id,
