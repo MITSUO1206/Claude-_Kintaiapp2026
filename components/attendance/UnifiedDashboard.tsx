@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { AttendanceTable } from './AttendanceTable'
 import { MonthSummary } from './MonthSummary'
 import { ApprovalBanner } from './ApprovalBanner'
 import { MobileDayView } from './MobileDayView'
-import type { AttendanceRecord, MonthlyApproval } from '@/lib/types'
+import { ComplianceBar } from './ComplianceBar'
+import type { AttendanceRecord, MonthlyApproval, ComplianceSummary } from '@/lib/types'
 
 interface UnifiedDashboardProps {
   userName: string
@@ -28,7 +29,9 @@ export function UnifiedDashboard({
   const [approval,     setApproval]     = useState<MonthlyApproval | null>(initialApproval)
   const [year,         setYear]         = useState(initialYear)
   const [month,        setMonth]        = useState(initialMonth)
-  const [loading,      setLoading]      = useState(false)
+  const [loading,          setLoading]          = useState(false)
+  const [complianceData,    setComplianceData]    = useState<ComplianceSummary | null>(null)
+  const [complianceLoading, setComplianceLoading] = useState(false)
 
   const today = useMemo(() => {
     const jst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
@@ -45,10 +48,12 @@ export function UnifiedDashboard({
     setYear(newYear)
     setMonth(newMonth)
     setLoading(true)
+    setComplianceLoading(true)
     try {
-      const [recordsRes, approvalRes] = await Promise.all([
+      const [recordsRes, approvalRes, complianceRes] = await Promise.all([
         fetch(`/api/attendance?year=${newYear}&month=${newMonth}`),
         fetch(`/api/approvals?year=${newYear}&month=${newMonth}`),
+        fetch(`/api/compliance/summary?year=${newYear}&month=${newMonth}`),
       ])
       if (recordsRes.ok) {
         const data = await recordsRes.json() as { records?: AttendanceRecord[] }
@@ -60,9 +65,26 @@ export function UnifiedDashboard({
       } else {
         setApproval(null)
       }
+      if (complianceRes.ok) {
+        const data = await complianceRes.json() as { summary?: ComplianceSummary }
+        setComplianceData(data.summary ?? null)
+      }
     } finally {
       setLoading(false)
+      setComplianceLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
+    setComplianceLoading(true)
+    fetch(`/api/compliance/summary?year=${year}&month=${month}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { summary?: ComplianceSummary } | null) => {
+        setComplianceData(data?.summary ?? null)
+      })
+      .catch(() => {})
+      .finally(() => setComplianceLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSaved = useCallback((record: AttendanceRecord) => {
@@ -89,6 +111,8 @@ export function UnifiedDashboard({
           initialDate={today}
           onSaved={handleSaved}
           onMonthChange={handleMonthChange}
+          complianceData={complianceData}
+          complianceLoading={complianceLoading}
         />
       </div>
 
@@ -125,12 +149,13 @@ export function UnifiedDashboard({
         {/* メインコンテンツ */}
         <main className="flex-1 flex flex-col min-h-screen">
           {/* サマリーバー */}
-          <div className="px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0">
+          <div className="px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0 space-y-2">
             <MonthSummary
               totalDays={summary.total_days}
               totalMinutes={summary.total_minutes}
               overtimeMinutes={summary.overtime_minutes}
             />
+            <ComplianceBar data={complianceData} loading={complianceLoading} />
           </div>
 
           {/* 勤怠テーブル */}

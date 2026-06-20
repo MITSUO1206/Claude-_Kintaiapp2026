@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import type { AttendanceRecord, WorkLocation } from '@/lib/types'
+import type { AttendanceRecord, WorkLocation, ComplianceSummary } from '@/lib/types'
 import { MobileMonthlyList } from './MobileMonthlyList'
+import { ComplianceBar } from './ComplianceBar'
 
 interface MobileDayViewProps {
   userName: string
@@ -12,6 +13,8 @@ interface MobileDayViewProps {
   initialDate: string
   onSaved: (record: AttendanceRecord) => void
   onMonthChange: (year: number, month: number) => void
+  complianceData: ComplianceSummary | null
+  complianceLoading: boolean
 }
 
 const WORK_LOCATIONS: { value: WorkLocation; label: string }[] = [
@@ -63,6 +66,7 @@ function offsetDate(dateStr: string, delta: number): string {
 
 export function MobileDayView({
   userName, monthRecords, year, month, initialDate, onSaved, onMonthChange,
+  complianceData, complianceLoading,
 }: MobileDayViewProps) {
   const [currentDate,  setCurrentDate]  = useState(initialDate)
   const [shiftTypes,   setShiftTypes]   = useState<string[]>(DEFAULT_SHIFTS)
@@ -186,6 +190,9 @@ export function MobileDayView({
           翌日 ›
         </button>
       </div>
+
+      {/* コンプライアンス情報 */}
+      <ComplianceBar data={complianceData} loading={complianceLoading} mobile />
 
       {/* フォーム */}
       <div className="flex-1 overflow-y-auto">
