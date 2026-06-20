@@ -35,6 +35,8 @@ export async function PATCH(request: NextRequest) {
       'overtime_alert_hours', 'overtime_limit_hours', 'overtime_annual_limit',
       'overtime_rate_25', 'overtime_rate_50',
       'holiday_weekdays', 'payment_on_holiday',
+      'health_insurance_rate', 'pension_rate', 'employment_ins_rate',
+      'consecutive_work_limit', 'interval_min_hours', 'annual_alert_ratio',
     ]
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
     for (const key of allowed) {

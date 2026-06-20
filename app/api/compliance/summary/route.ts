@@ -6,7 +6,7 @@ import type { ComplianceSummary } from '@/lib/types'
 type AttRow      = { work_date: string; status: string; overtime_minutes: number | null }
 type ClockRow    = { work_date: string; clock_in: string | null; clock_out: string | null }
 type LeaveRow    = { total_days: number; used_days: number }
-type WorkRuleRow = { overtime_limit_hours: number; overtime_annual_limit: number; overtime_alert_hours: number }
+type WorkRuleRow = { overtime_limit_hours: number; overtime_annual_limit: number; overtime_alert_hours: number; consecutive_work_limit: number; interval_min_hours: number; annual_alert_ratio: number }
 
 export async function GET(request: NextRequest) {
   // auth エラーのみ 401、それ以外は 500 を返すため認証を分離
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
         .order('work_date', { ascending: false })
         .limit(2),
 
-      db.select('work_rules', 'overtime_limit_hours, overtime_annual_limit, overtime_alert_hours')
+      db.select('work_rules', 'overtime_limit_hours, overtime_annual_limit, overtime_alert_hours, consecutive_work_limit, interval_min_hours, annual_alert_ratio')
         .limit(1)
         .single(),
     ])
@@ -79,6 +79,9 @@ export async function GET(request: NextRequest) {
       overtime_limit_hours:  45,
       overtime_annual_limit: 360,
       overtime_alert_hours:  36,
+      consecutive_work_limit: 14,
+      interval_min_hours:     11,
+      annual_alert_ratio:     0.83,
     }
 
     const paid_leave_remaining        = leaveRow ? Math.max(0, leaveRow.total_days - leaveRow.used_days) : 0
@@ -90,7 +93,7 @@ export async function GET(request: NextRequest) {
     const attStatusByDate = new Map(recentAtt.map((r) => [r.work_date, r.status]))
     let consecutive_work_days = 0
     const cursor = new Date(now)
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 90; i++) {  // 90日は取得ウィンドウ上限（連続上限は rule.consecutive_work_limit で判定）
       const dateStr = cursor.toLocaleDateString('sv', { timeZone: 'Asia/Tokyo' })
       if (attStatusByDate.get(dateStr) === 'present') {
         consecutive_work_days++
@@ -114,7 +117,7 @@ export async function GET(request: NextRequest) {
       const prevClockOut = prevRecord?.clock_out ?? null
       if (prevClockOut && nextClockIn) {
         const diffMs = new Date(nextClockIn).getTime() - new Date(prevClockOut).getTime()
-        interval_ok  = diffMs >= 11 * 60 * 60 * 1000
+        interval_ok  = diffMs >= Number(rule.interval_min_hours ?? 11) * 60 * 60 * 1000
       }
     }
 
@@ -126,9 +129,12 @@ export async function GET(request: NextRequest) {
       last_clock_out,
       interval_ok,
       work_rules: {
-        overtime_limit_hours:  Number(rule.overtime_limit_hours  ?? 45),
-        overtime_annual_limit: Number(rule.overtime_annual_limit ?? 360),
-        overtime_alert_hours:  Number(rule.overtime_alert_hours  ?? 36),
+        overtime_limit_hours:   Number(rule.overtime_limit_hours   ?? 45),
+        overtime_annual_limit:  Number(rule.overtime_annual_limit  ?? 360),
+        overtime_alert_hours:   Number(rule.overtime_alert_hours   ?? 36),
+        consecutive_work_limit: Number(rule.consecutive_work_limit ?? 14),
+        interval_min_hours:     Number(rule.interval_min_hours     ?? 11),
+        annual_alert_ratio:     Number(rule.annual_alert_ratio     ?? 0.83),
       },
     }
 

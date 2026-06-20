@@ -26,6 +26,12 @@ export interface WorkRule {
   payment_day: number
   holiday_weekdays: string[]
   payment_on_holiday: string
+  health_insurance_rate: number
+  pension_rate: number
+  employment_ins_rate: number
+  consecutive_work_limit: number
+  interval_min_hours: number
+  annual_alert_ratio: number
 }
 
 export interface User {
@@ -232,6 +238,9 @@ export interface ComplianceSummary {
     overtime_limit_hours: number
     overtime_annual_limit: number
     overtime_alert_hours: number
+    consecutive_work_limit: number
+    interval_min_hours: number
+    annual_alert_ratio: number
   }
 }
 

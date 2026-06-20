@@ -16,6 +16,9 @@ export interface PayslipInput {
   other_deduction: number
   overtime_rate_25?: number
   overtime_rate_50?: number
+  health_insurance_rate?: number
+  pension_rate?: number
+  employment_ins_rate?: number
 }
 
 export interface PayslipResult {
@@ -82,6 +85,9 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
     other_deduction,
     overtime_rate_25 = 1.25,
     overtime_rate_50 = 1.50,
+    health_insurance_rate = 0.0497,
+    pension_rate = 0.0915,
+    employment_ins_rate = 0.006,
   } = input
 
   const actualHours   = actual_minutes / 60
@@ -110,10 +116,9 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
 
   const gross_pay = basePay + overtime_pay + night_pay + holiday_pay + commuting_allowance + other_allowance
 
-  // 社会保険料（従業員負担分の近似）
-  const health_insurance     = round(gross_pay * 0.0497)  // 東京都標準
-  const pension              = round(gross_pay * 0.0915)
-  const employment_insurance = round(gross_pay * 0.006)
+  const health_insurance     = round(gross_pay * health_insurance_rate)
+  const pension              = round(gross_pay * pension_rate)
+  const employment_insurance = round(gross_pay * employment_ins_rate)
 
   const taxable = Math.max(0, gross_pay - health_insurance - pension - employment_insurance)
   const income_tax = calcIncomeTax(taxable)

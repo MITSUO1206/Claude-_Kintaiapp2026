@@ -8,7 +8,7 @@ import type { ApiError } from '@/lib/types'
 
 type UserRow       = { id: string; salary_type: string; base_salary: number; commuting_allowance: number; resident_tax: number }
 type SalaryConfig  = { user_id: string; salary_type: string; base_salary: number }
-type WorkRule      = { work_hours_per_day: number; work_days_per_month: number; overtime_rate_25: number; overtime_rate_50: number }
+type WorkRule      = { work_hours_per_day: number; work_days_per_month: number; overtime_rate_25: number; overtime_rate_50: number; health_insurance_rate: number; pension_rate: number; employment_ins_rate: number }
 type AttRow        = { user_id: string; actual_minutes: number | null; overtime_minutes: number | null; night_minutes: number; is_holiday_work: boolean; status: string }
 type FieldValueRow = { user_id: string; label: string; category: string; amount: number }
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const [usersRes, workRuleRes, attendancesRes, fieldValuesRes, salaryConfigsRes] = await Promise.all([
       db.select('users', 'id, salary_type, base_salary, commuting_allowance, resident_tax')
         .in('id', targetUserIds),
-      db.select('work_rules', 'work_hours_per_day, work_days_per_month, overtime_rate_25, overtime_rate_50')
+      db.select('work_rules', 'work_hours_per_day, work_days_per_month, overtime_rate_25, overtime_rate_50, health_insurance_rate, pension_rate, employment_ins_rate')
         .limit(1)
         .single(),
       db.select('attendance_records', 'user_id, actual_minutes, overtime_minutes, night_minutes, is_holiday_work, status')
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     ])
 
     const userMap    = new Map(((usersRes.data ?? []) as unknown as UserRow[]).map((u) => [u.id, u]))
-    const workRule   = (workRuleRes.data as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20, overtime_rate_25: 1.25, overtime_rate_50: 1.50 }
+    const workRule   = (workRuleRes.data as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20, overtime_rate_25: 1.25, overtime_rate_50: 1.50, health_insurance_rate: 0.0497, pension_rate: 0.0915, employment_ins_rate: 0.006 }
     const attRows    = (attendancesRes.data ?? []) as unknown as AttRow[]
     const fieldValues = (fieldValuesRes.data ?? []) as unknown as FieldValueRow[]
     const salaryConfigMap = new Map(((salaryConfigsRes.data ?? []) as unknown as SalaryConfig[]).map((c) => [c.user_id, c]))
@@ -129,8 +129,11 @@ export async function POST(request: NextRequest) {
         other_allowance:      extraAllowance,
         resident_tax:         user.resident_tax ?? 0,
         other_deduction:      extraDeduction,
-        overtime_rate_25:     Number(workRule.overtime_rate_25 ?? 1.25),
-        overtime_rate_50:     Number(workRule.overtime_rate_50 ?? 1.50),
+        overtime_rate_25:        Number(workRule.overtime_rate_25        ?? 1.25),
+        overtime_rate_50:        Number(workRule.overtime_rate_50        ?? 1.50),
+        health_insurance_rate:   Number(workRule.health_insurance_rate   ?? 0.0497),
+        pension_rate:            Number(workRule.pension_rate            ?? 0.0915),
+        employment_ins_rate:     Number(workRule.employment_ins_rate     ?? 0.006),
       })
 
       // overtime_pay_tier2 は payslips テーブルに列がないため除外してスプレッド

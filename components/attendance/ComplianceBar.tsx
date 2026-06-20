@@ -69,10 +69,11 @@ export function ComplianceBar({ data, loading, mobile = false }: ComplianceBarPr
 
   const monthlyHours = minutesToHours(data.monthly_overtime_minutes)
   const annualHours  = minutesToHours(data.annual_overtime_minutes)
-  const { overtime_limit_hours, overtime_annual_limit, overtime_alert_hours } = data.work_rules
+  const { overtime_limit_hours, overtime_annual_limit, overtime_alert_hours, consecutive_work_limit, annual_alert_ratio } = data.work_rules
 
-  const intervalWarning = !data.interval_ok
-  const consecutiveWarn = data.consecutive_work_days >= 14
+  const annualAlertHours = Math.round(overtime_annual_limit * annual_alert_ratio)
+  const intervalWarning  = !data.interval_ok
+  const consecutiveWarn  = data.consecutive_work_days >= consecutive_work_limit
 
   if (mobile) {
     return (
@@ -86,7 +87,7 @@ export function ComplianceBar({ data, loading, mobile = false }: ComplianceBarPr
         <OvertimeBar
           hours={annualHours}
           limitHours={overtime_annual_limit}
-          alertHours={Math.round(overtime_annual_limit * 0.83)}
+          alertHours={annualAlertHours}
           label="年間累計"
         />
         <div className="flex gap-4 pt-1 border-t border-gray-100">
@@ -100,12 +101,12 @@ export function ComplianceBar({ data, loading, mobile = false }: ComplianceBarPr
         </div>
         {intervalWarning && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-xs text-red-600">
-            ⚠️ 前日退勤から11時間未満です
+            ⚠️ 前日退勤から{data.work_rules.interval_min_hours}時間未満です
           </div>
         )}
         {consecutiveWarn && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-xs text-red-600">
-            ⚠️ 連続勤務{data.consecutive_work_days}日（法定上限14日）
+            ⚠️ 連続勤務{data.consecutive_work_days}日（上限{consecutive_work_limit}日）
           </div>
         )}
       </div>
@@ -113,7 +114,7 @@ export function ComplianceBar({ data, loading, mobile = false }: ComplianceBarPr
   }
 
   const monthStatus  = getOvertimeStatus(monthlyHours, overtime_alert_hours, overtime_limit_hours)
-  const annualStatus = getOvertimeStatus(annualHours, Math.round(overtime_annual_limit * 0.83), overtime_annual_limit)
+  const annualStatus = getOvertimeStatus(annualHours, annualAlertHours, overtime_annual_limit)
   const { text: monthText }  = STATUS_COLOR[monthStatus]
   const { text: annualText } = STATUS_COLOR[annualStatus]
 
