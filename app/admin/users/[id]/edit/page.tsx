@@ -19,18 +19,23 @@ export default async function EditUserPage({ params }: { params: Params }) {
   const { id } = await params
   const db = withCompany(payload.company_id)
 
-  const { data: user } = await db
-    .select('users', 'id, employee_code, name, email, role, salary_type, base_salary, commuting_allowance, resident_tax, hired_at, employment_type, weekly_working_days')
-    .eq('id', id)
-    .single()
+  const [{ data: user }, patternsRes] = await Promise.all([
+    db.select('users', 'id, employee_code, name, email, role, salary_type, base_salary, commuting_allowance, resident_tax, hired_at, employment_type, weekly_working_days, work_rule_pattern_id')
+      .eq('id', id)
+      .single(),
+    db.select('work_rule_patterns', 'id, name, is_default').order('is_default', { ascending: false }),
+  ])
 
   type UserRow = {
     id: string; employee_code: string; name: string; email: string
     role: string; salary_type: string; base_salary: number
     commuting_allowance: number; resident_tax: number; hired_at: string
     employment_type: string; weekly_working_days: number
+    work_rule_pattern_id: string | null
   }
+  type PatternRow = { id: string; name: string; is_default: boolean }
   const u = user as unknown as UserRow | null
+  const patterns = (patternsRes.data ?? []) as unknown as PatternRow[]
   if (!u) redirect('/admin/users')
 
   return (
@@ -46,6 +51,7 @@ export default async function EditUserPage({ params }: { params: Params }) {
             <UserForm
               mode="edit"
               userId={id}
+              patterns={patterns}
               initial={{
                 employee_code: u.employee_code,
                 name: u.name,
@@ -58,6 +64,7 @@ export default async function EditUserPage({ params }: { params: Params }) {
                 hired_at: u.hired_at?.slice(0, 10) ?? '',
                 employment_type: u.employment_type ?? 'full_time',
                 weekly_working_days: String(u.weekly_working_days ?? 5),
+                work_rule_pattern_id: u.work_rule_pattern_id ?? '',
               }}
             />
           </CardContent>

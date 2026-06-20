@@ -15,18 +15,26 @@ interface UserFormData {
   hired_at: string
   employment_type: string
   weekly_working_days: string
+  work_rule_pattern_id: string
   password: string
+}
+
+interface PatternOption {
+  id: string
+  name: string
+  is_default: boolean
 }
 
 interface Props {
   mode: 'create' | 'edit'
   userId?: string
   initial?: Partial<UserFormData>
+  patterns?: PatternOption[]
 }
 
 const ROLE_LABELS: Record<string, string> = { employee: '一般社員', manager: 'マネージャー', admin: '管理者' }
 
-export function UserForm({ mode, userId, initial }: Props) {
+export function UserForm({ mode, userId, initial, patterns = [] }: Props) {
   const router = useRouter()
   const [form, setForm] = useState<UserFormData>({
     employee_code: initial?.employee_code ?? '',
@@ -40,6 +48,7 @@ export function UserForm({ mode, userId, initial }: Props) {
     hired_at: initial?.hired_at ?? '',
     employment_type: initial?.employment_type ?? 'full_time',
     weekly_working_days: initial?.weekly_working_days ?? '5',
+    work_rule_pattern_id: initial?.work_rule_pattern_id ?? '',
     password: '',
   })
   const [loading, setLoading] = useState(false)
@@ -66,6 +75,7 @@ export function UserForm({ mode, userId, initial }: Props) {
         hired_at: form.hired_at,
         employment_type: form.employment_type,
         weekly_working_days: parseInt(form.weekly_working_days) || 5,
+        work_rule_pattern_id: form.work_rule_pattern_id || null,
       }
 
       if (mode === 'create') {
@@ -186,6 +196,21 @@ export function UserForm({ mode, userId, initial }: Props) {
           </select>
         </div>
       </div>
+
+      {patterns.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">勤務パターン</label>
+          <select value={form.work_rule_pattern_id} onChange={(e) => set('work_rule_pattern_id', e.target.value)}
+            className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">— デフォルトパターンを使用 —</option>
+            {patterns.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}{p.is_default ? '（デフォルト）' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
