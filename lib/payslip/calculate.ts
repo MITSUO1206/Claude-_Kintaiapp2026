@@ -98,7 +98,7 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
   const basePay =
     salary_type === 'monthly'
       ? round(base_salary - (absent_days > 0 ? hourlyRate * work_hours_per_day * absent_days : 0))
-      : round(hourlyRate * (actualHours - overtimeHours - nightHours))
+      : round(hourlyRate * (actualHours - overtimeHours))
 
   const TIER2_THRESHOLD = 60
   const tier1Hours = Math.min(overtimeHours, TIER2_THRESHOLD)

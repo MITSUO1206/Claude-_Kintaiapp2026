@@ -133,36 +133,44 @@ export async function POST(request: NextRequest) {
         overtime_rate_50:     Number(workRule.overtime_rate_50 ?? 1.50),
       })
 
+      // overtime_pay_tier2 は payslips テーブルに列がないため除外してスプレッド
+      const { overtime_pay_tier2, ...dbResult } = result
       upserts.push({
         company_id:   payload.company_id,
         user_id:      uid,
         year,
         month,
         status:       'draft',
-        ...result,
+        ...dbResult,
         updated_at:   new Date().toISOString(),
       })
 
       // 明細行を構築（固定項目 + カスタム項目）
-      const items: Array<Record<string, unknown>> = [
-        { category: 'income',    label: '基本給',   amount: Math.round(result.base_salary),          sort_order: 1,  is_auto_calc: true },
-        ...(result.overtime_pay_tier2 > 0
+      // 残業手当: 60h超かどうかで分割。overtime_hours > 60 で判定し、
+      // tier2 の金額が 0 に切り捨てられても別行表示を維持する（労基法 §37 開示義務）
+      const overtimeItems: Array<Record<string, unknown>> =
+        result.overtime_hours > 60
           ? [
-              { category: 'income', label: '残業手当（〜60h）', amount: Math.round(result.overtime_pay - result.overtime_pay_tier2), sort_order: 2, is_auto_calc: true },
-              { category: 'income', label: '残業手当（60h超）', amount: Math.round(result.overtime_pay_tier2),                      sort_order: 3, is_auto_calc: true },
+              { category: 'income', label: '残業手当（〜60h）', amount: Math.round(result.overtime_pay - overtime_pay_tier2), is_auto_calc: true },
+              { category: 'income', label: '残業手当（60h超）', amount: Math.round(overtime_pay_tier2),                      is_auto_calc: true },
             ]
-          : [{ category: 'income', label: '残業手当', amount: Math.round(result.overtime_pay), sort_order: 2, is_auto_calc: true }]
-        ),
-        { category: 'income',    label: '深夜手当', amount: Math.round(result.night_pay),            sort_order: 4,  is_auto_calc: true },
-        { category: 'income',    label: '休日手当', amount: Math.round(result.holiday_pay),          sort_order: 5,  is_auto_calc: true },
-        { category: 'income',    label: '通勤手当', amount: Math.round(user.commuting_allowance ?? 0), sort_order: 6, is_auto_calc: false },
+          : [{ category: 'income', label: '残業手当', amount: Math.round(result.overtime_pay), is_auto_calc: true }]
+
+      const afterOT = 2 + overtimeItems.length  // 深夜手当の sort_order 基点
+
+      const items: Array<Record<string, unknown>> = [
+        { category: 'income',    label: '基本給',   amount: Math.round(result.base_salary),             sort_order: 1,          is_auto_calc: true },
+        ...overtimeItems.map((item, i) => ({ ...item, sort_order: 2 + i })),
+        { category: 'income',    label: '深夜手当', amount: Math.round(result.night_pay),               sort_order: afterOT,     is_auto_calc: true },
+        { category: 'income',    label: '休日手当', amount: Math.round(result.holiday_pay),             sort_order: afterOT + 1, is_auto_calc: true },
+        { category: 'income',    label: '通勤手当', amount: Math.round(user.commuting_allowance ?? 0),  sort_order: afterOT + 2, is_auto_calc: false },
         ...userFieldValues
           .filter((v) => v.category === 'allowance' && Number(v.amount) !== 0)
           .map((v, i) => ({
             category:     'income',
             label:         v.label,
             amount:        Math.round(Number(v.amount)),
-            sort_order:    7 + i,
+            sort_order:    afterOT + 3 + i,
             is_auto_calc:  false,
           })),
         { category: 'deduction', label: '健康保険', amount: Math.round(result.health_insurance),     sort_order: 10, is_auto_calc: true },

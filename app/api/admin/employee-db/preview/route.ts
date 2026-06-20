@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import { calculatePayslip } from '@/lib/payslip/calculate'
 
 type UserRow        = { id: string; salary_type: string; base_salary: number; commuting_allowance: number; resident_tax: number }
-type WorkRule       = { work_hours_per_day: number; work_days_per_month: number }
+type WorkRule       = { work_hours_per_day: number; work_days_per_month: number; overtime_rate_25: number; overtime_rate_50: number }
 type AttRow         = { user_id: string; actual_minutes: number | null; overtime_minutes: number | null; night_minutes: number; is_holiday_work: boolean; status: string }
 type FieldValueRow  = { user_id: string; category: string; amount: number }
 type SalaryConfig   = { user_id: string; salary_type: string; base_salary: number }
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     const [usersRes, workRuleRes, attendancesRes, fieldValuesRes, salaryConfigsRes] = await Promise.all([
       db.select('users', 'id, salary_type, base_salary, commuting_allowance, resident_tax').eq('is_active', true),
-      db.select('work_rules', 'work_hours_per_day, work_days_per_month').limit(1).single(),
+      db.select('work_rules', 'work_hours_per_day, work_days_per_month, overtime_rate_25, overtime_rate_50').limit(1).single(),
       db.select('attendance_records', 'user_id, actual_minutes, overtime_minutes, night_minutes, is_holiday_work, status')
         .gte('work_date', fromDate)
         .lte('work_date', toDate),
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     ])
 
     const users       = (usersRes.data        ?? []) as unknown as UserRow[]
-    const workRule    = (workRuleRes.data as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20 }
+    const workRule    = (workRuleRes.data as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20, overtime_rate_25: 1.25, overtime_rate_50: 1.50 }
     const attRows     = (attendancesRes.data   ?? []) as unknown as AttRow[]
     const fieldValues = (fieldValuesRes.data   ?? []) as unknown as FieldValueRow[]
     const salaryConfigs = (salaryConfigsRes.data ?? []) as unknown as SalaryConfig[]
@@ -97,6 +97,8 @@ export async function GET(request: NextRequest) {
         other_allowance,
         resident_tax:         user.resident_tax        ?? 0,
         other_deduction,
+        overtime_rate_25:     Number(workRule.overtime_rate_25 ?? 1.25),
+        overtime_rate_50:     Number(workRule.overtime_rate_50 ?? 1.50),
       })
 
       return {

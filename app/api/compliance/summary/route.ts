@@ -9,8 +9,15 @@ type LeaveRow    = { total_days: number; used_days: number }
 type WorkRuleRow = { overtime_limit_hours: number; overtime_annual_limit: number; overtime_alert_hours: number }
 
 export async function GET(request: NextRequest) {
+  // auth エラーのみ 401、それ以外は 500 を返すため認証を分離
+  let payload: { user_id: string; company_id: string }
   try {
-    const payload = await requireAuth(request)
+    payload = await requireAuth(request)
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
     const userId  = payload.user_id
     const db      = withCompany(payload.company_id)
 
@@ -32,6 +39,7 @@ export async function GET(request: NextRequest) {
     const [leaveRes, annualOTRes, monthlyOTRes, recentAttRes, clockRes, workRuleRes] = await Promise.all([
       db.select('leave_balances', 'total_days, used_days')
         .eq('user_id', userId)
+        .eq('fiscal_year', year)
         .order('fiscal_year', { ascending: false })
         .limit(1),
 
@@ -53,7 +61,7 @@ export async function GET(request: NextRequest) {
 
       db.select('attendance_records', 'work_date, clock_in, clock_out')
         .eq('user_id', userId)
-        .not('clock_out', 'is', null)
+        .not('clock_in', 'is', null)
         .order('work_date', { ascending: false })
         .limit(2),
 
@@ -77,26 +85,36 @@ export async function GET(request: NextRequest) {
     const monthly_overtime_minutes    = monthlyRows.reduce((s, r) => s + (r.overtime_minutes ?? 0), 0)
     const annual_overtime_minutes     = annualRows .reduce((s, r) => s + (r.overtime_minutes ?? 0), 0)
 
+    // 連続勤務日数: カレンダー日付を today から遡り、記録が存在しない日・present 以外の日でブレーク。
+    // 単純に existing rows を順に辿ると記録のない日（週末未入力など）を見落とすため日付で判定する。
+    const attStatusByDate = new Map(recentAtt.map((r) => [r.work_date, r.status]))
     let consecutive_work_days = 0
-    for (const r of recentAtt) {
-      if (r.status === 'present') {
+    const cursor = new Date(now)
+    for (let i = 0; i < 90; i++) {
+      const dateStr = cursor.toLocaleDateString('sv', { timeZone: 'Asia/Tokyo' })
+      if (attStatusByDate.get(dateStr) === 'present') {
         consecutive_work_days++
+        cursor.setDate(cursor.getDate() - 1)
       } else {
         break
       }
     }
 
+    // インターバルチェック: clock_in を基準に直近2レコードを取得済み（clock_out IS NULL の在勤中も含む）。
+    // clockRows[0] = 最新（在勤中の場合 clock_out = null）、clockRows[1] = 前シフト（clock_out あり）。
     let interval_ok    = true
     let last_clock_out: string | null = null
-    if (clockRows.length > 0) {
-      last_clock_out = clockRows[0].clock_out
-    }
+    // 直近の退勤時刻: clock_out がある最初のレコードから取得
+    const latestCompleted = clockRows.find((r) => r.clock_out !== null)
+    if (latestCompleted) last_clock_out = latestCompleted.clock_out
+
     if (clockRows.length >= 2) {
-      const prevClockOut = clockRows[1].clock_out
-      const nextClockIn  = clockRows[0].clock_in
+      const nextClockIn  = clockRows[0].clock_in                                            // 最新の出勤
+      const prevRecord   = clockRows.find((r, i) => i > 0 && r.clock_out !== null)         // 前シフトの退勤
+      const prevClockOut = prevRecord?.clock_out ?? null
       if (prevClockOut && nextClockIn) {
-        const diffMs    = new Date(nextClockIn).getTime() - new Date(prevClockOut).getTime()
-        interval_ok     = diffMs >= 11 * 60 * 60 * 1000
+        const diffMs = new Date(nextClockIn).getTime() - new Date(prevClockOut).getTime()
+        interval_ok  = diffMs >= 11 * 60 * 60 * 1000
       }
     }
 
@@ -115,7 +133,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ summary })
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (err) {
+    console.error('compliance summary error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

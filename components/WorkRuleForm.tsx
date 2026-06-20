@@ -116,9 +116,9 @@ export function WorkRuleForm({ initialRule }: { initialRule: WorkRule | null }) 
               <p className="text-xs text-gray-400 mt-1">月上限の何時間前から黄色警告するか</p>
             </div>
             <div>
-              <Label>割増賃金率（月45h超）</Label>
+              <Label>割増賃金率（月60h以内）</Label>
               <Input type="number" step="0.01" min="1" value={rate25} onChange={(e) => setRate25(e.target.value)} />
-              <p className="text-xs text-gray-400 mt-1">法定最低 1.25（25%増）</p>
+              <p className="text-xs text-gray-400 mt-1">時間外労働60h以内に適用（法定最低 1.25）</p>
             </div>
             <div>
               <Label>割増賃金率（月60h超）</Label>
