@@ -21,6 +21,8 @@ export function WorkRuleForm({ initialRule }: { initialRule: WorkRule | null }) 
   const [alertHours, setAlertHours]   = useState(String(initialRule?.overtime_alert_hours   ?? 36))
   const [limitHours, setLimitHours]   = useState(String(initialRule?.overtime_limit_hours   ?? 45))
   const [annualLimit, setAnnualLimit] = useState(String((initialRule as unknown as Record<string, unknown>)?.overtime_annual_limit ?? 360))
+  const [rate25, setRate25] = useState(String((initialRule as unknown as Record<string, unknown>)?.overtime_rate_25 ?? 1.25))
+  const [rate50, setRate50] = useState(String((initialRule as unknown as Record<string, unknown>)?.overtime_rate_50 ?? 1.50))
 
   const [holidayWeekdays, setHolidayWeekdays] = useState<string[]>(
     initialRule?.holiday_weekdays ?? ['sunday']
@@ -56,6 +58,8 @@ export function WorkRuleForm({ initialRule }: { initialRule: WorkRule | null }) 
           overtime_alert_hours:   parseInt(alertHours),
           overtime_limit_hours:   parseInt(limitHours),
           overtime_annual_limit:  parseInt(annualLimit),
+          overtime_rate_25:       parseFloat(rate25),
+          overtime_rate_50:       parseFloat(rate50),
           holiday_weekdays:      holidayWeekdays,
           payment_on_holiday:    paymentOnHoliday,
         }),
@@ -110,6 +114,16 @@ export function WorkRuleForm({ initialRule }: { initialRule: WorkRule | null }) 
               <Label>警告しきい値（時間/月）</Label>
               <Input type="number" value={alertHours} onChange={(e) => setAlertHours(e.target.value)} />
               <p className="text-xs text-gray-400 mt-1">月上限の何時間前から黄色警告するか</p>
+            </div>
+            <div>
+              <Label>割増賃金率（月45h超）</Label>
+              <Input type="number" step="0.01" min="1" value={rate25} onChange={(e) => setRate25(e.target.value)} />
+              <p className="text-xs text-gray-400 mt-1">法定最低 1.25（25%増）</p>
+            </div>
+            <div>
+              <Label>割増賃金率（月60h超）</Label>
+              <Input type="number" step="0.01" min="1" value={rate50} onChange={(e) => setRate50(e.target.value)} />
+              <p className="text-xs text-gray-400 mt-1">法定最低 1.50（50%増）</p>
             </div>
           </div>
 

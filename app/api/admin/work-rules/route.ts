@@ -33,6 +33,7 @@ export async function PATCH(request: NextRequest) {
       'work_hours_per_day', 'work_days_per_month',
       'closing_day', 'payment_day',
       'overtime_alert_hours', 'overtime_limit_hours', 'overtime_annual_limit',
+      'overtime_rate_25', 'overtime_rate_50',
       'holiday_weekdays', 'payment_on_holiday',
     ]
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
