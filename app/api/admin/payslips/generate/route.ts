@@ -8,7 +8,7 @@ import type { ApiError } from '@/lib/types'
 
 type UserRow       = { id: string; salary_type: string; base_salary: number; commuting_allowance: number; resident_tax: number }
 type SalaryConfig  = { user_id: string; salary_type: string; base_salary: number }
-type WorkRule      = { work_hours_per_day: number; work_days_per_month: number }
+type WorkRule      = { work_hours_per_day: number; work_days_per_month: number; overtime_rate_25: number; overtime_rate_50: number }
 type AttRow        = { user_id: string; actual_minutes: number | null; overtime_minutes: number | null; night_minutes: number; is_holiday_work: boolean; status: string }
 type FieldValueRow = { user_id: string; label: string; category: string; amount: number }
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const [usersRes, workRuleRes, attendancesRes, fieldValuesRes, salaryConfigsRes] = await Promise.all([
       db.select('users', 'id, salary_type, base_salary, commuting_allowance, resident_tax')
         .in('id', targetUserIds),
-      db.select('work_rules', 'work_hours_per_day, work_days_per_month')
+      db.select('work_rules', 'work_hours_per_day, work_days_per_month, overtime_rate_25, overtime_rate_50')
         .limit(1)
         .single(),
       db.select('attendance_records', 'user_id, actual_minutes, overtime_minutes, night_minutes, is_holiday_work, status')
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     ])
 
     const userMap    = new Map(((usersRes.data ?? []) as unknown as UserRow[]).map((u) => [u.id, u]))
-    const workRule   = (workRuleRes.data as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20 }
+    const workRule   = (workRuleRes.data as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20, overtime_rate_25: 1.25, overtime_rate_50: 1.50 }
     const attRows    = (attendancesRes.data ?? []) as unknown as AttRow[]
     const fieldValues = (fieldValuesRes.data ?? []) as unknown as FieldValueRow[]
     const salaryConfigMap = new Map(((salaryConfigsRes.data ?? []) as unknown as SalaryConfig[]).map((c) => [c.user_id, c]))
@@ -126,9 +126,11 @@ export async function POST(request: NextRequest) {
         absent_days:          absentDays,
         paid_leave_days:      paidLeaveDays,
         commuting_allowance:  user.commuting_allowance ?? 0,
-        other_allowance:      extraAllowance,   // ← カスタム手当を反映
+        other_allowance:      extraAllowance,
         resident_tax:         user.resident_tax ?? 0,
-        other_deduction:      extraDeduction,   // ← カスタム控除を反映
+        other_deduction:      extraDeduction,
+        overtime_rate_25:     Number(workRule.overtime_rate_25 ?? 1.25),
+        overtime_rate_50:     Number(workRule.overtime_rate_50 ?? 1.50),
       })
 
       upserts.push({
@@ -144,18 +146,23 @@ export async function POST(request: NextRequest) {
       // 明細行を構築（固定項目 + カスタム項目）
       const items: Array<Record<string, unknown>> = [
         { category: 'income',    label: '基本給',   amount: Math.round(result.base_salary),          sort_order: 1,  is_auto_calc: true },
-        { category: 'income',    label: '残業手当', amount: Math.round(result.overtime_pay),         sort_order: 2,  is_auto_calc: true },
-        { category: 'income',    label: '深夜手当', amount: Math.round(result.night_pay),            sort_order: 3,  is_auto_calc: true },
-        { category: 'income',    label: '休日手当', amount: Math.round(result.holiday_pay),          sort_order: 4,  is_auto_calc: true },
-        { category: 'income',    label: '通勤手当', amount: Math.round(user.commuting_allowance ?? 0), sort_order: 5, is_auto_calc: false },
-        // カスタム手当（社員給与項目DB より）
+        ...(result.overtime_pay_tier2 > 0
+          ? [
+              { category: 'income', label: '残業手当（〜60h）', amount: Math.round(result.overtime_pay - result.overtime_pay_tier2), sort_order: 2, is_auto_calc: true },
+              { category: 'income', label: '残業手当（60h超）', amount: Math.round(result.overtime_pay_tier2),                      sort_order: 3, is_auto_calc: true },
+            ]
+          : [{ category: 'income', label: '残業手当', amount: Math.round(result.overtime_pay), sort_order: 2, is_auto_calc: true }]
+        ),
+        { category: 'income',    label: '深夜手当', amount: Math.round(result.night_pay),            sort_order: 4,  is_auto_calc: true },
+        { category: 'income',    label: '休日手当', amount: Math.round(result.holiday_pay),          sort_order: 5,  is_auto_calc: true },
+        { category: 'income',    label: '通勤手当', amount: Math.round(user.commuting_allowance ?? 0), sort_order: 6, is_auto_calc: false },
         ...userFieldValues
           .filter((v) => v.category === 'allowance' && Number(v.amount) !== 0)
           .map((v, i) => ({
             category:     'income',
             label:         v.label,
             amount:        Math.round(Number(v.amount)),
-            sort_order:    6 + i,
+            sort_order:    7 + i,
             is_auto_calc:  false,
           })),
         { category: 'deduction', label: '健康保険', amount: Math.round(result.health_insurance),     sort_order: 10, is_auto_calc: true },
