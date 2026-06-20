@@ -221,6 +221,20 @@ export interface ApiError {
 
 export type WorkLocation = 'office' | 'home' | 'satellite' | 'other'
 
+export interface ComplianceSummary {
+  paid_leave_remaining: number
+  monthly_overtime_minutes: number
+  annual_overtime_minutes: number
+  consecutive_work_days: number
+  last_clock_out: string | null
+  interval_ok: boolean
+  work_rules: {
+    overtime_limit_hours: number
+    overtime_annual_limit: number
+    overtime_alert_hours: number
+  }
+}
+
 export type ApprovalStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
 
 export interface MonthlyApproval {
