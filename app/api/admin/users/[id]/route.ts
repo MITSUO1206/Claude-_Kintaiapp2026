@@ -46,7 +46,7 @@ export async function PATCH(
     const body = await request.json() as Record<string, unknown>
     const db = withCompany(payload.company_id)
 
-    const allowed = ['name', 'email', 'role', 'salary_type', 'base_salary', 'commuting_allowance', 'resident_tax', 'hired_at', 'is_active', 'force_password_change', 'employment_type', 'weekly_working_days']
+    const allowed = ['name', 'email', 'role', 'salary_type', 'base_salary', 'commuting_allowance', 'resident_tax', 'hired_at', 'is_active', 'force_password_change', 'employment_type', 'weekly_working_days', 'work_rule_pattern_id']
     const updates: Record<string, unknown> = {}
     for (const key of allowed) {
       if (key in body) updates[key] = body[key]

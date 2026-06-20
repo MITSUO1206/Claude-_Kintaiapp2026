@@ -9,6 +9,20 @@ export interface Company {
   created_at: string
 }
 
+export interface WorkRulePattern {
+  id: string
+  company_id: string
+  name: string
+  start_time: string
+  end_time: string
+  break_minutes: number
+  work_hours_per_day: number
+  work_days_per_month: number
+  is_night_shift: boolean
+  is_default: boolean
+  created_at: string
+}
+
 export interface WorkRule {
   id: string
   company_id: string

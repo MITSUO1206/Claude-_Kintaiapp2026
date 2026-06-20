@@ -6,9 +6,10 @@ import { calculatePayslip } from '@/lib/payslip/calculate'
 import { writeAuditLog } from '@/lib/audit/log'
 import type { ApiError } from '@/lib/types'
 
-type UserRow       = { id: string; salary_type: string; base_salary: number; commuting_allowance: number; resident_tax: number }
+type UserRow       = { id: string; salary_type: string; base_salary: number; commuting_allowance: number; resident_tax: number; work_rule_pattern_id: string | null }
 type SalaryConfig  = { user_id: string; salary_type: string; base_salary: number }
 type WorkRule      = { work_hours_per_day: number; work_days_per_month: number; overtime_rate_25: number; overtime_rate_50: number; health_insurance_rate: number; pension_rate: number; employment_ins_rate: number }
+type PatternRow    = { id: string; work_hours_per_day: number; work_days_per_month: number }
 type AttRow        = { user_id: string; actual_minutes: number | null; overtime_minutes: number | null; night_minutes: number; is_holiday_work: boolean; status: string }
 type FieldValueRow = { user_id: string; label: string; category: string; amount: number }
 
@@ -37,8 +38,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 必要なデータを並列取得
-    const [usersRes, workRuleRes, attendancesRes, fieldValuesRes, salaryConfigsRes] = await Promise.all([
-      db.select('users', 'id, salary_type, base_salary, commuting_allowance, resident_tax')
+    const [usersRes, workRuleRes, attendancesRes, fieldValuesRes, salaryConfigsRes, patternsRes] = await Promise.all([
+      db.select('users', 'id, salary_type, base_salary, commuting_allowance, resident_tax, work_rule_pattern_id')
         .in('id', targetUserIds),
       db.select('work_rules', 'work_hours_per_day, work_days_per_month, overtime_rate_25, overtime_rate_50, health_insurance_rate, pension_rate, employment_ins_rate')
         .limit(1)
@@ -63,10 +64,12 @@ export async function POST(request: NextRequest) {
         .eq('year', year)
         .eq('month', month)
         .in('user_id', targetUserIds),
+      db.select('work_rule_patterns', 'id, work_hours_per_day, work_days_per_month'),
     ])
 
     const userMap    = new Map(((usersRes.data ?? []) as unknown as UserRow[]).map((u) => [u.id, u]))
     const workRule   = (workRuleRes.data as unknown as WorkRule | null) ?? { work_hours_per_day: 8, work_days_per_month: 20, overtime_rate_25: 1.25, overtime_rate_50: 1.50, health_insurance_rate: 0.0497, pension_rate: 0.0915, employment_ins_rate: 0.006 }
+    const patternMap = new Map(((patternsRes.data ?? []) as unknown as PatternRow[]).map((p) => [p.id, p]))
     const attRows    = (attendancesRes.data ?? []) as unknown as AttRow[]
     const fieldValues = (fieldValuesRes.data ?? []) as unknown as FieldValueRow[]
     const salaryConfigMap = new Map(((salaryConfigsRes.data ?? []) as unknown as SalaryConfig[]).map((c) => [c.user_id, c]))
@@ -112,12 +115,14 @@ export async function POST(request: NextRequest) {
         .reduce((s, v) => s + Number(v.amount), 0)
 
       // 給与計算（月別設定を優先、なければ users テーブル）
-      const salaryConfig = salaryConfigMap.get(uid)
+      // 勤務パターンが割り当て済みの場合はパターンの所定時間・日数を使用
+      const salaryConfig  = salaryConfigMap.get(uid)
+      const userPattern   = user.work_rule_pattern_id ? patternMap.get(user.work_rule_pattern_id) : null
       const result = calculatePayslip({
         salary_type:         ((salaryConfig?.salary_type ?? user.salary_type) as 'monthly' | 'hourly'),
         base_salary:          salaryConfig?.base_salary ?? user.base_salary ?? 0,
-        work_hours_per_day:   workRule.work_hours_per_day,
-        work_days_per_month:  workRule.work_days_per_month,
+        work_hours_per_day:   userPattern?.work_hours_per_day  ?? workRule.work_hours_per_day,
+        work_days_per_month:  userPattern?.work_days_per_month ?? workRule.work_days_per_month,
         actual_minutes:       totalActualMinutes,
         overtime_minutes:     totalOvertimeMinutes,
         night_minutes:        totalNightMinutes,

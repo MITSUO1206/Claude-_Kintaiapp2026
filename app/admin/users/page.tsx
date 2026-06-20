@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AdminUserActions } from '@/components/AdminUserActions'
 import { AdminSidebar } from '@/components/AdminSidebar'
+import { UserPatternSelect } from '@/components/admin/UserPatternSelect'
+import type { WorkRulePattern } from '@/lib/types'
 
 const ROLE_LABELS: Record<string, string> = { employee: '一般', manager: 'マネージャー', admin: '管理者' }
 const SALARY_LABELS: Record<string, string> = { monthly: '月給', hourly: '時給' }
@@ -14,6 +16,7 @@ type UserRow = {
   id: string; employee_code: string; name: string; email: string
   role: string; salary_type: string; base_salary: number
   hired_at: string; is_active: boolean; force_password_change: boolean
+  work_rule_pattern_id: string | null
 }
 
 export default async function AdminUsersPage() {
@@ -28,11 +31,14 @@ export default async function AdminUsersPage() {
 
   const db = withCompany(payload.company_id)
 
-  const { data } = await db
-    .select('users', 'id, employee_code, name, email, role, salary_type, base_salary, hired_at, is_active, force_password_change')
-    .order('employee_code')
+  const [usersRes, patternsRes] = await Promise.all([
+    db.select('users', 'id, employee_code, name, email, role, salary_type, base_salary, hired_at, is_active, force_password_change, work_rule_pattern_id')
+      .order('employee_code'),
+    db.select('work_rule_patterns', 'id, name, is_default').order('is_default', { ascending: false }),
+  ])
 
-  const users = (data ?? []) as unknown as UserRow[]
+  const users    = (usersRes.data    ?? []) as unknown as UserRow[]
+  const patterns = (patternsRes.data ?? []) as unknown as Pick<WorkRulePattern, 'id' | 'name' | 'is_default'>[]
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -59,6 +65,7 @@ export default async function AdminUsersPage() {
                   <th className="px-3 py-2 text-left">氏名</th>
                   <th className="px-3 py-2 text-center">権限</th>
                   <th className="px-3 py-2 text-left">給与</th>
+                  <th className="px-3 py-2 text-left">勤務パターン</th>
                   <th className="px-3 py-2 text-left">入社日</th>
                   <th className="px-3 py-2 text-center">状態</th>
                   <th className="px-3 py-2 text-left">操作</th>
@@ -82,6 +89,17 @@ export default async function AdminUsersPage() {
                     <td className="px-3 py-2">
                       {SALARY_LABELS[u.salary_type]}
                       <span className="text-gray-400 ml-1">¥{(u.base_salary ?? 0).toLocaleString()}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      {patterns.length > 0 ? (
+                        <UserPatternSelect
+                          userId={u.id}
+                          currentPatternId={u.work_rule_pattern_id}
+                          patterns={patterns}
+                        />
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-gray-500">{u.hired_at?.slice(0, 10) ?? '—'}</td>
                     <td className="px-3 py-2 text-center">
