@@ -103,10 +103,12 @@ export async function PUT(
 
     const db = withCompany(payload.company_id)
 
-    const { data: userCheck } = await db.select('users', 'id').eq('id', userId).single()
+    type UserCheck = { id: string; work_rule_pattern_id: string | null }
+    const { data: userCheck } = await db.select('users', 'id, work_rule_pattern_id').eq('id', userId).single()
     if (!userCheck) {
       return NextResponse.json<ApiError>({ error: '社員が見つかりません' }, { status: 404 })
     }
+    const userTyped = userCheck as unknown as UserCheck
 
     let actualMinutes: number | null = null
     let overtimeMinutes: number | null = null
@@ -135,8 +137,39 @@ export async function PUT(
     const fiscalYear = parseInt(work_date.substring(0, 4))
     const resolvedStatus = await adjustLeaveBalance(db, userId, fiscalYear, ex?.status ?? null, baseStatus)
 
-    const clockInISO  = clock_in  ? toJSTTimestamp(work_date, clock_in)  : null
-    const clockOutISO = clock_out ? toJSTTimestamp(work_date, clock_out) : null
+    let clockInISO: string | null  = clock_in  ? toJSTTimestamp(work_date, clock_in)  : null
+    let clockOutISO: string | null = clock_out ? toJSTTimestamp(work_date, clock_out) : null
+    let effectBreak = break_minutes
+
+    // 年休 → 打刻未入力の場合は勤務パターンの所定時間で自動埋め
+    if (resolvedStatus === 'leave_paid' && !clock_in) {
+      type PRow = { start_time: string; end_time: string; break_minutes: number; work_hours_per_day: number }
+      let pStart = '09:00', pEnd = '18:00', pBreak = 60, pHours = 8
+
+      if (userTyped.work_rule_pattern_id) {
+        const { data: pRow } = await db
+          .select('work_rule_patterns', 'start_time, end_time, break_minutes, work_hours_per_day')
+          .eq('id', userTyped.work_rule_pattern_id)
+          .single()
+        const p = pRow as unknown as PRow | null
+        if (p) {
+          pStart = p.start_time.slice(0, 5)
+          pEnd   = p.end_time.slice(0, 5)
+          pBreak = p.break_minutes
+          pHours = Number(p.work_hours_per_day)
+        }
+      } else {
+        const { data: wrRow } = await db.select('work_rules', 'work_hours_per_day').single()
+        type WR2 = { work_hours_per_day: number }
+        pHours = (wrRow as unknown as WR2 | null)?.work_hours_per_day ?? 8
+      }
+
+      clockInISO      = toJSTTimestamp(work_date, pStart)
+      clockOutISO     = toJSTTimestamp(work_date, pEnd)
+      actualMinutes   = Math.round(pHours * 60)
+      overtimeMinutes = 0
+      effectBreak     = pBreak
+    }
 
     let record: AttendanceRecord
 
@@ -145,7 +178,7 @@ export async function PUT(
         .update('attendance_records', {
           clock_in:         clockInISO,
           clock_out:        clockOutISO,
-          break_minutes,
+          break_minutes:    effectBreak,
           actual_minutes:   actualMinutes,
           overtime_minutes: overtimeMinutes,
           work_location:    work_location ?? null,
@@ -165,7 +198,7 @@ export async function PUT(
         work_date,
         clock_in:         clockInISO,
         clock_out:        clockOutISO,
-        break_minutes,
+        break_minutes:    effectBreak,
         actual_minutes:   actualMinutes,
         overtime_minutes: overtimeMinutes,
         night_minutes:    0,

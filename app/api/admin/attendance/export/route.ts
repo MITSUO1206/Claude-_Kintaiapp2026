@@ -4,7 +4,8 @@ import { withCompany } from '@/lib/db/withCompany'
 import { writeAuditLog } from '@/lib/audit/log'
 import type { ApiError, AttendanceRecord } from '@/lib/types'
 
-type UserRow = { id: string; employee_code: string; name: string; salary_type: string }
+type UserRow    = { id: string; employee_code: string; name: string; salary_type: string; work_rule_pattern_id: string | null }
+type PatternRow = { id: string; start_time: string; end_time: string }
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,17 +43,17 @@ export async function GET(request: NextRequest) {
       to   = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
     }
 
-    let usersQuery = db.select('users', 'id, employee_code, name, salary_type').eq('is_active', true)
+    let usersQuery = db.select('users', 'id, employee_code, name, salary_type, work_rule_pattern_id').eq('is_active', true)
     if (userIdParam) usersQuery = usersQuery.eq('id', userIdParam)
-    const { data: users } = await usersQuery.order('employee_code', { ascending: true })
+    const [{ data: users }, { data: records }, { data: patterns }] = await Promise.all([
+      usersQuery.order('employee_code', { ascending: true }),
+      db.select('attendance_records').gte('work_date', from).lte('work_date', to),
+      db.select('work_rule_patterns', 'id, start_time, end_time'),
+    ])
 
-    const { data: records } = await db
-      .select('attendance_records')
-      .gte('work_date', from)
-      .lte('work_date', to)
-
-    const typedUsers   = (users   ?? []) as unknown as UserRow[]
-    const typedRecords = (records ?? []) as unknown as AttendanceRecord[]
+    const typedUsers    = (users    ?? []) as unknown as UserRow[]
+    const typedRecords  = (records  ?? []) as unknown as AttendanceRecord[]
+    const patternMap    = new Map(((patterns ?? []) as unknown as PatternRow[]).map((p) => [p.id, p]))
 
     const period = yearParam
       ? `${yearParam}年${monthParam ?? ''}月`
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     const BOM = '﻿'
     const headers = [
-      '社員番号', '氏名', '雇用形態', '対象年月',
+      '社員番号', '氏名', '雇用形態', '勤務パターン', '対象年月',
       '出勤日数', '実働時間(h)', '残業時間(h)',
       '深夜時間(h)', '休日出勤日数', '有給取得日数',
     ]
@@ -74,11 +75,16 @@ export async function GET(request: NextRequest) {
       const holiday_days = userRecords.filter((r) => r.is_holiday_work).length
       const leave_days   = userRecords.filter((r) => r.status === 'leave_paid').length
       const salaryLabel  = user.salary_type === 'monthly' ? '月給' : '時給'
+      const pattern      = user.work_rule_pattern_id ? patternMap.get(user.work_rule_pattern_id) : null
+      const patternLabel = pattern
+        ? `${pattern.start_time.slice(0, 5)}〜${pattern.end_time.slice(0, 5)}`
+        : 'デフォルト'
 
       return [
         user.employee_code,
         user.name,
         salaryLabel,
+        patternLabel,
         period,
         total_days,
         (total_min / 60).toFixed(1),
