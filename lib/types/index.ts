@@ -19,6 +19,9 @@ export interface WorkRule {
   break_minutes: number
   overtime_alert_hours: number
   overtime_limit_hours: number
+  overtime_annual_limit: number
+  overtime_rate_25: number
+  overtime_rate_50: number
   closing_day: number
   payment_day: number
   holiday_weekdays: string[]

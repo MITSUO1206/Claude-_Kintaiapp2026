@@ -14,6 +14,8 @@ export interface PayslipInput {
   other_allowance: number
   resident_tax: number
   other_deduction: number
+  overtime_rate_25?: number
+  overtime_rate_50?: number
 }
 
 export interface PayslipResult {
@@ -26,6 +28,7 @@ export interface PayslipResult {
   holiday_work_days: number
   base_salary: number
   overtime_pay: number
+  overtime_pay_tier2: number
   night_pay: number
   holiday_pay: number
   commuting_allowance: number
@@ -77,6 +80,8 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
     other_allowance,
     resident_tax,
     other_deduction,
+    overtime_rate_25 = 1.25,
+    overtime_rate_50 = 1.50,
   } = input
 
   const actualHours   = actual_minutes / 60
@@ -95,7 +100,11 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
       ? round(base_salary - (absent_days > 0 ? hourlyRate * work_hours_per_day * absent_days : 0))
       : round(hourlyRate * (actualHours - overtimeHours - nightHours))
 
-  const overtime_pay  = round(hourlyRate * 1.25 * overtimeHours)
+  const TIER2_THRESHOLD = 60
+  const tier1Hours = Math.min(overtimeHours, TIER2_THRESHOLD)
+  const tier2Hours = Math.max(0, overtimeHours - TIER2_THRESHOLD)
+  const overtime_pay_tier2 = round(hourlyRate * overtime_rate_50 * tier2Hours)
+  const overtime_pay = round(hourlyRate * overtime_rate_25 * tier1Hours) + overtime_pay_tier2
   const night_pay     = round(hourlyRate * 0.25 * nightHours)
   const holiday_pay   = round(hourlyRate * 1.35 * holidayHours)
 
@@ -117,11 +126,12 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
     absent_days,
     paid_leave_days,
     actual_hours:    Math.round(actualHours   * 100) / 100,
-    overtime_hours:  Math.round(overtimeHours * 100) / 100,
-    night_hours:     Math.round(nightHours    * 100) / 100,
+    overtime_hours:      Math.round(overtimeHours * 100) / 100,
+    night_hours:         Math.round(nightHours    * 100) / 100,
     holiday_work_days,
-    base_salary:    basePay,
+    base_salary:         basePay,
     overtime_pay,
+    overtime_pay_tier2,
     night_pay,
     holiday_pay,
     commuting_allowance,
