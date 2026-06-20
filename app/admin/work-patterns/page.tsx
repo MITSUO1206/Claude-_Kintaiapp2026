@@ -261,26 +261,6 @@ export default function WorkPatternsPage() {
           </div>
         )}
 
-        {/* DB migration notice */}
-        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
-          <p className="font-semibold mb-1">初回セットアップ: Supabase SQL Editorで以下を実行してください</p>
-          <pre className="text-xs bg-amber-100 rounded p-2 overflow-x-auto whitespace-pre">{`CREATE TABLE work_rule_patterns (
-  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id         uuid NOT NULL,
-  name               text NOT NULL,
-  start_time         time NOT NULL DEFAULT '09:00',
-  end_time           time NOT NULL DEFAULT '18:00',
-  break_minutes      integer NOT NULL DEFAULT 60,
-  work_hours_per_day numeric NOT NULL DEFAULT 8,
-  work_days_per_month integer NOT NULL DEFAULT 20,
-  is_night_shift     boolean NOT NULL DEFAULT false,
-  is_default         boolean NOT NULL DEFAULT false,
-  created_at         timestamptz DEFAULT now(),
-  UNIQUE (company_id, name)
-);
-ALTER TABLE users ADD COLUMN IF NOT EXISTS work_rule_pattern_id uuid REFERENCES work_rule_patterns(id);`}</pre>
-        </div>
-
         {loading ? (
           <div className="bg-white rounded-xl border p-8 text-center text-gray-400 text-sm">読み込み中...</div>
         ) : patterns.length === 0 ? (
